@@ -17,6 +17,9 @@ import settingsIcon from "../../../assets/icons/settings.png";
 import logoutIcon from "../../../assets/icons/logout.png";
 // ⚠️ مفيش أيقونة "دورات" مستوردة في الملف الأصلي، فمؤقتاً باستخدم dashboardIcon.
 // لو عندك أيقونة مخصصة (زي courses.png) استورديها وحطيها بدل ده.
+// ⚠️ نفس الكلام على "الأرباح" - كان في الأصل عامل import لـ subscriptionIcon
+// بس مش موجود فعليًا في الملف، فبستخدم dashboardIcon مؤقتًا برضه.
+// لو عندك أيقونة مخصصة (earnings.png مثلاً) استورديها وحطيها بدل ده.
 
 const TeacherSidebar = ({ isOpen, setIsOpen }) => {
   const unread = useSidebarUnread();
@@ -36,7 +39,8 @@ const TeacherSidebar = ({ isOpen, setIsOpen }) => {
       icon: notificationsIcon,
       path: "/teacher/notifications",
     },
-    // { title: "الأرباح", icon: subscriptionIcon, path: "/teacher/earnings" },
+    // ⚠️ اتفعّلت هنا (كانت متعمول عليها comment) - بتظهر بس للمحاضرين لأنها مرتبطة بأرباح دوراتهم
+    ...(isInstructor ? [{ title: "الأرباح", icon: dashboardIcon, path: "/teacher/earnings" }] : []),
     { title: "الإعدادات", icon: settingsIcon, path: "/teacher/settings" },
   ];
 

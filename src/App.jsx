@@ -115,6 +115,7 @@ import AdminQuizReviewPage from "./features/course-management/pages/AdminQuizRev
 import AdminCourseFormPage from "./features/course-management/pages/AdminCourseFormPage";
 import CourseFinancesPage from "./pages/admin/course-finances/CourseFinancesPage";
 import CommissionSettingsPage from "./pages/admin/course-finances/CommissionSettingsPage";
+import InstructorCommissionRatesPage from "./pages/teacher/InstructorCommissionRatesPage";
 
 function App() {
   const { user, checkingAccountState } = useContext(AuthContext);
@@ -171,7 +172,7 @@ function App() {
           <Route index element={<Landing />} />
           <Route path="/blogs" element={<AllBlogsPage />} />
           <Route path="/blog/:slug" element={<BlogPostPage />} />
-           <Route path="/courses" element={<CoursesPage />} />
+          <Route path="/courses" element={<CoursesPage />} />
           <Route path="/courses/:slug" element={<CourseDetailsPage />} />
           <Route path="/instructors/:id" element={<InstructorPage />} />
         </Route>
@@ -444,7 +445,7 @@ function App() {
         <Route path="/payment/courses/:slug" element={<StudentGuard><CoursePaymentPage /></StudentGuard>} />
         <Route path="/learn/:slug" element={<StudentGuard><CoursePlayerPage /></StudentGuard>} />
         <Route path="/exam/:slug" element={<StudentGuard><ExamPage /></StudentGuard>} />
-         <Route path="/exam-result/:slug" element={<StudentGuard><ExamResultPage /></StudentGuard>} />
+        <Route path="/exam-result/:slug" element={<StudentGuard><ExamResultPage /></StudentGuard>} />
         <Route path="/certificate/:slug" element={<StudentGuard><CertificatePage /></StudentGuard>} />
 
 
@@ -583,27 +584,36 @@ function App() {
           }
         />
 
-         <Route path="/teacher/courses" element={<TeacherGuard><InstructorGuard><TeacherCoursesPage /></InstructorGuard></TeacherGuard>} />
+        <Route
+  path="/teacher/earnings/commission-rates"
+  element={
+    <TeacherGuard>
+      <InstructorCommissionRatesPage />
+    </TeacherGuard>
+  }
+/>
+
+        <Route path="/teacher/courses" element={<TeacherGuard><InstructorGuard><TeacherCoursesPage /></InstructorGuard></TeacherGuard>} />
         <Route path="/teacher/courses/new" element={<TeacherGuard><InstructorGuard><TeacherCourseFormPage /></InstructorGuard></TeacherGuard>} />
         <Route path="/teacher/courses/:courseId" element={<TeacherGuard><InstructorGuard><TeacherCourseDetailsPage /></InstructorGuard></TeacherGuard>} />
         <Route path="/teacher/courses/:courseId/edit" element={<TeacherGuard><InstructorGuard><TeacherCourseFormPage /></InstructorGuard></TeacherGuard>} />
         {/* Admin */}
-        
-           <Route path="/admin/courses" element={user ? <AdminCoursesPage /> : <Navigate to="/login" replace />} />
+
+        <Route path="/admin/courses" element={user ? <AdminCoursesPage /> : <Navigate to="/login" replace />} />
         <Route path="/admin/courses/:courseId" element={user ? <AdminCourseDetailsPage /> : <Navigate to="/login" replace />} />
         <Route path="/admin/courses/:courseId/quizzes/:lessonId" element={user ? <AdminQuizReviewPage /> : <Navigate to="/login" replace />} />
         <Route path="/admin/courses/new" element={user ? <AdminCourseFormPage /> : <Navigate to="/login" replace />} />
         <Route path="/admin/courses/:courseId/edit" element={user ? <AdminCourseFormPage /> : <Navigate to="/login" replace />} />
 
 
-          <Route
-  path="/admin/course-finances"
-  element={user ? <CourseFinancesPage /> : <Navigate to="/login" replace />}
-/>
-<Route
-  path="/admin/course-finances/commission-settings"
-  element={user ? <CommissionSettingsPage /> : <Navigate to="/login" replace />}
-/>
+        <Route
+          path="/admin/course-finances"
+          element={user ? <CourseFinancesPage /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/admin/course-finances/commission-settings"
+          element={user ? <CommissionSettingsPage /> : <Navigate to="/login" replace />}
+        />
 
         <Route
           path="/admin-dashboard"
