@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import AdminLayout from "../../../components/admin/layout/AdminLayout";
 import { getTeacherCourse } from "../utils/teacherCoursesStorage";
+
 import { approveCourse, fetchAdminCourse, rejectCourse } from "../api/coursesApi";
 import toast from "react-hot-toast";
 import mathCover from "../../../assets/courses/math-course.png";
@@ -92,6 +93,7 @@ const OverviewTab = ({ course, coverSrc, totalLessons }) => {
             ["لغة الشرح", course.language || "العربية"],
             ["المرحلة", course.academicStage || course.stage || "غير محددة"],
             ["الصف الدراسي", course.academicGrade || course.grade || "غير محدد"],
+            ["المنهج", course.academicCurriculumName || "غير محدد"],
             ["المادة", course.subject || course.category || "غير محددة"],
           ].map(([label, value]) => (
             <div key={label}>

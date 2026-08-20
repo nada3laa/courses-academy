@@ -84,7 +84,14 @@ export const normalizeCourse = (source = {}) => {
     : Array.isArray(course.payments) ? course.payments
       : Array.isArray(source.transactions) ? source.transactions : [];
   const entityId = (value) => value?._id || value?.id || (typeof value === "string" ? value : "");
-  const academicCurriculum = course.curriculumRef || course.academicCurriculum || (typeof course.curriculum === "object" && !Array.isArray(course.curriculum) ? course.curriculum : null);
+  const academicCurriculum =
+  course.curriculumRef ||
+  course.academicCurriculum ||
+  course.curriculumId ||
+  (typeof course.curriculum === "object" && !Array.isArray(course.curriculum)
+    ? course.curriculum
+    : null);
+
   const academicStage = course.stage || course.academicStage;
   const academicGrade = course.grade || course.academicGrade;
   const academicSubject = course.subject;
@@ -110,7 +117,14 @@ export const normalizeCourse = (source = {}) => {
     academicStageId: entityId(academicStage),
     academicGradeId: entityId(academicGrade),
     subjectId: entityId(academicSubject),
-    academicCurriculumName: textOf(academicCurriculum),
+    // academicCurriculumName: textOf(academicCurriculum),
+    academicCurriculumName:
+  textOf(
+    academicCurriculum ||
+    course.curriculumName ||
+    course.curriculumTitle ||
+    course.curriculum
+  ),
     academicStage: textOf(academicStage),
     academicGrade: textOf(academicGrade),
     subject: textOf(academicSubject),

@@ -142,7 +142,7 @@ export const createCourseLesson = (courseId, sectionId, payload) =>
 export const uploadCourseLessonMedia = (courseId, lessonId, file, contentType = "video", onUploadProgress) => {
   const formData = new FormData();
   formData.append("media", file);
-  formData.append("contentType", contentType);
+  formData.append("type", contentType);
   return API.patch(`/courses/${courseId}/lessons/${lessonId}/media`, formData, { onUploadProgress, timeout: 10 * 60 * 1000 });
 };
 export const submitMarketplaceCourse = (id) => API.post(`/courses/${id}/submit`);
