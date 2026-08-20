@@ -1,0 +1,261 @@
+@import url('https://fonts.googleapis.com/css2?family=Tajaw al:wght@300;400;500;700;800&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+:root {
+  --text: #6b6375;
+  --text-h: #08060d;
+  --bg: #fff;
+  --border: #e5e4e7;
+  --code-bg: #f4f3ec;
+  --accent: #aa3bff;
+  --accent-bg: rgba(170, 59, 255, 0.1);
+  --accent-border: rgba(170, 59, 255, 0.5);
+  --social-bg: rgba(244, 243, 236, 0.5);
+  --shadow: rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+
+  --primary: #123C91;
+  --primary-dark: #0F3278;
+  --secondary: #12C6B0;
+  --bg-light: #EAF4FF;
+  --bg-section: #F8FBFF;
+  --text-dark: #1F2937;
+  --text-light: #6B7280;
+  --white: #FFFFFF;
+  --border-light: #DBE7F5;
+
+
+  --sans: 'IBM Plex Sans Arabic', sans-serif;
+  --heading: 'Tajawal', sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* ========================= GLOBAL RESET ========================= */
+
+/* =========================
+   BODY
+========================= */
+body {
+  direction: rtl;
+  text-align: right;
+
+  font-family: var(--sans);
+
+  background-color: var(--white);
+  color: var(--text-dark);
+
+  overflow-x: hidden;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+
+/* =========================
+   LINKS
+========================= */
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* =========================
+   LISTS
+========================= */
+ul,
+ol {
+  list-style: none;
+}
+
+/* =========================
+   IMAGES
+========================= */
+img {
+  display: block;
+  max-width: 100%;
+}
+
+/* =========================
+   BUTTONS
+========================= */
+button {
+  cursor: pointer;
+}
+
+@keyframes toast-countdown {
+  from {
+    transform: scaleX(1);
+  }
+
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.toast-countdown {
+  animation: toast-countdown 10s linear forwards;
+  transform-origin: right center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-countdown {
+    animation: none;
+  }
+}
+
+
+/* =========================
+   INPUTS
+========================= */
+input,
+textarea,
+select {
+  font-family: var(--body-font);
+  outline: none;
+}
+
+/* =========================
+   SECTIONS
+========================= */
+section {
+  padding: 90px 0;
+}
+
+/* =========================
+   CONTAINER
+========================= */
+.container-custom {
+  width: 100%;
+  max-width: 1400px;
+
+  margin-inline: auto;
+
+  padding-inline: 20px;
+}
+
+/* =========================
+   CUSTOM SCROLLBAR
+========================= */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #EDF4FF;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 30px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-dark);
+}
+
+
+/* =========================
+   TEXT SELECTION
+========================= */
+::selection {
+  background: var(--secondary);
+  color: white;
+}
+
+/* =========================
+   UTILITIES
+========================= */
+.text-gradient {
+  background: linear-gradient(90deg,
+      var(--primary),
+      var(--secondary));
+
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.shadow-custom {
+  box-shadow: var(--shadow);
+}
+
+.bg-main {
+  background-color: var(--bg-light);
+}
+
+.bg-section {
+  background-color: var(--bg-section);
+}
+
+.text-main {
+  color: var(--primary);
+}
+
+.text-secondary {
+  color: var(--secondary);
+}
+
+.border-main {
+  border-color: var(--border);
+}
+
+
+
+/* =========================
+   RESPONSIVE
+========================= */
+@media (max-width: 1024px) {
+  section {
+    padding: 70px 0;
+  }
+}
+
+@media (max-width: 768px) {
+  section {
+    padding: 60px 0;
+  }
+
+  .container-custom {
+    padding-inline: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  section {
+    padding: 50px 0;
+  }
+}
+
+/* ================= DESIGN SYSTEM HELPERS ================= */
+
+.text-primary {
+  color: var(--primary);
+}
+
+.text-secondary {
+  color: var(--secondary);
+}
+
+.bg-primary {
+  background-color: var(--primary);
+}
+
+.bg-secondary {
+  background-color: var(--secondary);
+}
+
+.border-primary {
+  border-color: var(--primary);
+}
+
+.border-secondary {
+  border-color: var(--secondary);
+}

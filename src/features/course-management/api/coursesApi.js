@@ -1,0 +1,438 @@
+import {
+  getAssetUrl,
+  getPublicCourses,
+  getPublicCourse,
+  getMyTeacherCourses,
+  getMyTeacherCourse,
+  getMyCourseEnrollments,
+  getPendingAdminCourses,
+  approveMarketplaceCourse,
+  rejectMarketplaceCourse,
+  deleteMarketplaceCourse,
+  getCourseCategories,
+  createCourseCategory,
+  createMarketplaceCourse,
+  updateMarketplaceCourse,
+  uploadCourseCover,
+  uploadCoursePromoVideo,
+  createCourseSection,
+  createCourseLesson,
+  uploadCourseLessonMedia,
+  submitMarketplaceCourse,
+  getTeachers,
+  getTeacher,
+  getUser,
+  getMyInstructorProfile,
+  getMyProfile,
+} from "../../../services/APIService";
+
+const valueOf = (value, fallback = "") => {
+  if (value == null) return fallback;
+  if (typeof value === "string" || typeof value === "number") return value;
+  if (Array.isArray(value)) return value.map((item) => valueOf(item)).filter(Boolean).join("، ");
+  const nested = value.ar ?? value.en ?? value.name ?? value.fullName ?? value.title ?? value.user;
+  return nested == null ? fallback : valueOf(nested, fallback);
+};
+
+const textOf = (value, fallback = "") => String(valueOf(value, fallback));
+
+const listOf = (payload) => {
+  const data = payload?.data?.data ?? payload?.data ?? payload;
+  if (Array.isArray(data)) return data;
+  return data?.courses || data?.enrollments || data?.items || data?.docs || [];
+};
+
+const statusLabels = {
+  published: "منشور",
+  pending: "قيد المراجعة",
+  pending_review: "قيد المراجعة",
+  under_review: "قيد المراجعة",
+  draft: "مسودة",
+  rejected: "مرفوض",
+  archived: "مؤرشف",
+};
+
+const levelLabels = {
+  beginner: "مبتدئ",
+  intermediate: "متوسط",
+  advanced: "متقدم",
+  all: "جميع المستويات",
+};
+
+export const normalizeCourse = (source = {}) => {
+  const enrollment = source.enrollment || source;
+  const course = source.course || source.courseId || enrollment.course || source;
+  const sections = (Array.isArray(course.sections) && course.sections.length ? course.sections : null)
+    || (Array.isArray(course.curriculum) ? course.curriculum : null)
+    || (Array.isArray(source.sections) ? source.sections : []);
+  const lessonCount = course.lessonsCount ?? course.lessonCount ?? sections.reduce(
+    (total, section) => total + (section.lessons?.length || 0),
+    0,
+  );
+  const completedLessons = source.completedLessonsCount ?? source.progress?.completedLessons ?? 0;
+  const progress = Number(source.progressPercentage ?? source.progress?.percentage ?? source.progress ?? 0);
+  const instructor = course.instructor || course.teacher || course.createdBy || {};
+  const category = course.category || {};
+  const price = Number(course.price?.amount ?? course.price ?? 0);
+  const studentsData = Array.isArray(course.enrollments) ? course.enrollments
+    : Array.isArray(course.students) ? course.students
+      : Array.isArray(source.enrollments) ? source.enrollments : [];
+  const reviewsData = Array.isArray(course.reviews) ? course.reviews
+    : Array.isArray(course.ratings) ? course.ratings
+      : Array.isArray(source.reviews) ? source.reviews : [];
+  const transactions = Array.isArray(course.transactions) ? course.transactions
+    : Array.isArray(course.payments) ? course.payments
+      : Array.isArray(source.transactions) ? source.transactions : [];
+  const entityId = (value) => value?._id || value?.id || (typeof value === "string" ? value : "");
+  const academicCurriculum = course.curriculumRef || course.academicCurriculum || (typeof course.curriculum === "object" && !Array.isArray(course.curriculum) ? course.curriculum : null);
+  const academicStage = course.stage || course.academicStage;
+  const academicGrade = course.grade || course.academicGrade;
+  const academicSubject = course.subject;
+
+  return {
+    ...course,
+    id: course._id || course.id,
+    slug: course.slug || course._id || course.id,
+    title: String(valueOf(course.title, "دورة تعليمية")),
+    titleEn: textOf(course.title?.en || course.titleEn || course.titleEnglish),
+    description: String(valueOf(course.description)),
+    category: String(valueOf(category, "عام")),
+    categoryId: category._id || category.id || (typeof course.category === "string" ? course.category : ""),
+    classification: String(valueOf(course.courseType, valueOf(category, "عام"))),
+    level: levelLabels[course.level] || valueOf(course.level, "جميع المستويات"),
+    language: valueOf(course.language, "العربية"),
+    instructor: String(valueOf(instructor, "الأكاديمية")),
+    instructorDetails: typeof instructor === "object" && instructor !== null
+      ? instructor
+      : { name: textOf(instructor, "الأكاديمية") },
+    instructorId: instructor._id || instructor.id || (typeof course.instructor === "string" ? course.instructor : ""),
+    academicCurriculumId: entityId(academicCurriculum),
+    academicStageId: entityId(academicStage),
+    academicGradeId: entityId(academicGrade),
+    subjectId: entityId(academicSubject),
+    academicCurriculumName: textOf(academicCurriculum),
+    academicStage: textOf(academicStage),
+    academicGrade: textOf(academicGrade),
+    subject: textOf(academicSubject),
+    shortDescription: textOf(course.shortDescription),
+    requirements: textOf(course.requirements),
+    targetAudience: textOf(course.targetAudience),
+    outcomes: course.outcomes || course.learningOutcomes || course.whatYouWillLearn || [],
+    tags: course.tags || [],
+    pricingType: course.pricingType || (price > 0 ? "paid" : "free"),
+    discountPercent: Number(course.discountPercent || course.discount || 0),
+    promoVideoUrl: getAssetUrl(course.promoVideo?.url || course.promoVideo || course.previewVideo),
+    price: course.pricingType === "free" ? 0 : price,
+    duration: Number(course.durationHours ?? course.totalDurationHours ?? course.duration ?? 0),
+    lessons: Number(lessonCount),
+    rating: Number(course.averageRating ?? course.rating ?? 0),
+    students: Number(course.enrollmentsCount ?? course.studentsCount ?? course.students ?? 0),
+    revenue: Number(course.revenue ?? 0),
+    createdAt: course.createdAt || source.createdAt,
+    updatedAt: course.updatedAt || source.updatedAt,
+    studentsData,
+    reviewsData,
+    transactions,
+    status: statusLabels[course.status] || valueOf(course.status, "مسودة"),
+    featured: Boolean(course.featured ?? course.isFeatured),
+    coverImage: getAssetUrl(course.coverImage?.url || course.coverImage || course.thumbnail),
+    sections,
+    curriculum: sections.map((section) => ({
+      ...section,
+      id: section._id || section.id,
+      title: valueOf(section.title),
+      lessons: (section.lessons || []).map((lesson) => ({
+        ...lesson,
+        id: lesson._id || lesson.id,
+        title: valueOf(lesson.title),
+        type: ({ video: "فيديو", document: "ملف", file: "ملف", audio: "صوت", quiz: "اختبار", exam: "اختبار" })[lesson.type || lesson.contentType] || lesson.type || lesson.contentType || "فيديو",
+        duration: Number(lesson.durationMinutes ?? lesson.duration ?? 0),
+        preview: Boolean(lesson.isPreview),
+        media: lesson.media?.url || lesson.mediaUrl || lesson.videoUrl || lesson.fileUrl
+          ? { name: lesson.media?.name || lesson.fileName || "محتوى الدرس", url: getAssetUrl(lesson.media?.url || lesson.mediaUrl || lesson.videoUrl || lesson.fileUrl) }
+          : null,
+        attachments: (lesson.attachments || []).map((file) => ({
+          ...file,
+          name: file.name || file.fileName || "مرفق",
+          url: getAssetUrl(file.url || file.path),
+        })),
+        quiz: lesson.quiz?.questions || lesson.questions || lesson.quiz || [],
+      })),
+    })),
+    progressData: {
+      percentage: Number.isFinite(progress) ? progress : 0,
+      completedLessons: Number(completedLessons),
+      totalLessons: Number(lessonCount),
+      completedTests: Number(source.completedQuizzesCount ?? 0),
+      lastCompletedTitle: valueOf(source.lastLesson?.title),
+    },
+    enrollmentId: source._id || source.id,
+  };
+};
+
+const uniqueCourses = (courses) => Array.from(
+  new Map(courses.filter((course) => course.id).map((course) => [String(course.id), course])).values(),
+);
+
+const enrichCourseInstructor = async (course) => {
+  const current = course.instructorDetails || {};
+  const currentName = textOf(current.name || current.fullName || current.user?.fullName);
+  const instructorId = course.instructorId || current._id || current.id;
+  if (currentName && currentName !== String(instructorId || "")) return course;
+  if (!instructorId) return course;
+
+  try {
+    let teacher;
+    try {
+      const response = await getTeacher(instructorId);
+      const data = response?.data?.data ?? response?.data ?? response;
+      teacher = data?.teacher || data?.instructor || data;
+    } catch {
+      try {
+        const response = await getMyInstructorProfile();
+        const data = response?.data?.data ?? response?.data ?? response;
+        teacher = data?.instructor || data?.teacher || data?.profile || data;
+      } catch {
+        const response = await getTeachers();
+        teacher = listOf(response).find((item) => {
+          const account = item.user || item;
+          return [item._id, item.id, account._id, account.id].some((id) => String(id || "") === String(instructorId));
+        });
+      }
+    }
+    if (!teacher) return course;
+    let account = teacher?.user && typeof teacher.user === "object" ? teacher.user : teacher;
+    const userId = typeof teacher?.user === "string"
+      ? teacher.user
+      : teacher?.userId || teacher?.user?._id || teacher?.user?.id || instructorId;
+    if (userId && (!account?.email || !account?.phone)) {
+      try {
+        const userResponse = await getUser(userId);
+        const userData = userResponse?.data?.data ?? userResponse?.data ?? userResponse;
+        account = userData?.user || userData;
+      } catch {
+        try {
+          const userResponse = await getMyProfile();
+          const userData = userResponse?.data?.data ?? userResponse?.data ?? userResponse;
+          account = userData?.user || userData;
+        } catch {
+          // The teacher profile can still be displayed when account details are restricted.
+        }
+      }
+    }
+    const firstSelection = teacher.teachingSelections?.[0];
+    const firstStage = firstSelection?.stages?.[0];
+    const firstGrade = firstStage?.grades?.[0];
+    const firstSubject = firstGrade?.subjects?.[0];
+    const name = textOf(
+      account?.fullName || account?.name || teacher?.fullName || teacher?.name,
+      course.instructor,
+    );
+    return {
+      ...course,
+      instructor: name,
+      instructorId: teacher?._id || teacher?.id || account?._id || account?.id || instructorId,
+      instructorDetails: {
+        ...teacher,
+        name,
+        fullName: name,
+        email: account?.email || teacher?.email,
+        phone: account?.phone || account?.phoneNumber || teacher?.phone || teacher?.phoneNumber,
+        avatar: getAssetUrl(account?.avatar || account?.profileImage || teacher?.avatar || teacher?.profileImage),
+        createdAt: account?.createdAt || teacher?.createdAt,
+        experience: teacher?.experienceYears ?? teacher?.yearsOfExperience ?? teacher?.experience,
+        yearsOfExperience: teacher?.experienceYears ?? teacher?.yearsOfExperience ?? teacher?.experience,
+        curriculum: textOf(firstSelection?.curriculum || teacher?.curriculum || teacher?.curriculums?.[0] || course.academicCurriculumName),
+        educationSystem: textOf(firstSelection?.curriculum || teacher?.educationSystem || course.academicCurriculumName),
+        stage: textOf(firstStage?.stage || firstStage || teacher?.stage || course.academicStage),
+        subject: textOf(firstSubject || teacher?.subject || teacher?.subjects?.[0] || course.subject),
+        user: account,
+      },
+    };
+  } catch {
+    return course;
+  }
+};
+
+export const fetchPublicCourses = async (params) =>
+  listOf(await getPublicCourses(params)).map(normalizeCourse);
+
+export const fetchPublicCourse = async (slug) =>
+  normalizeCourse(responseCourse(await getPublicCourse(slug)));
+
+export const fetchTeacherCourses = async (params) =>
+  listOf(await getMyTeacherCourses(params)).map(normalizeCourse);
+
+export const fetchTeacherCourse = async (id) =>
+  enrichCourseInstructor(normalizeCourse(responseCourse(await getMyTeacherCourse(id))));
+
+export const fetchStudentCourses = async (params) =>
+  listOf(await getMyCourseEnrollments(params)).map(normalizeCourse);
+
+export const fetchAdminCourses = async (params) => {
+  const responses = await Promise.allSettled([
+    getPublicCourses(params),
+    getPendingAdminCourses(params),
+    getMyTeacherCourses(params),
+  ]);
+  return uniqueCourses(
+    responses.flatMap((result) => result.status === "fulfilled" ? listOf(result.value) : []).map(normalizeCourse),
+  );
+};
+
+export const removeTeacherCourse = (courseId) => deleteMarketplaceCourse(courseId);
+
+export const approveCourse = async (courseId) =>
+  normalizeCourse(responseCourse(await approveMarketplaceCourse(courseId)));
+
+export const rejectCourse = async (courseId, reason, details = "") =>
+  normalizeCourse(responseCourse(await rejectMarketplaceCourse(courseId, {
+    reason,
+    details,
+    rejectionReason: reason,
+    rejectionDetails: details,
+  })));
+
+export const fetchCourseCategories = async () => listOf(await getCourseCategories());
+export const fetchCourseInstructors = async () => listOf(await getTeachers());
+export const addCourseCategory = async (name) => {
+  const response = await createCourseCategory({ name: { ar: name.trim(), en: name.trim() } });
+  const data = response?.data?.data ?? response?.data ?? response;
+  return data?.category || data;
+};
+
+const splitValues = (value) => Array.isArray(value)
+  ? value.filter(Boolean)
+  : String(value || "").split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
+
+const levelValues = {
+  "مبتدئ": "beginner",
+  "متوسط": "intermediate",
+  "متقدم": "advanced",
+  "جميع المستويات": "beginner",
+};
+const languageValues = { "عربي": "ar", "العربية": "ar", "إنجليزي": "en", "الإنجليزية": "en" };
+
+const isMongoId = (value) => /^[a-f\d]{24}$/i.test(String(value || ""));
+
+const coursePayload = (course) => {
+  const academicIds = {
+    curriculum: course.academicCurriculum,
+    stage: course.academicStage,
+    grade: course.academicGrade,
+    subject: course.subject,
+  };
+  const isAcademic = Object.values(academicIds).every(isMongoId);
+
+  return {
+    title: { ar: course.title.trim(), en: course.titleEn.trim() },
+    description: course.description || course.shortDescription || course.title,
+    requirements: splitValues(course.requirements),
+    targetAudience: splitValues(course.targetAudience),
+    category: course.categoryId || course.category,
+    courseType: isAcademic ? "academic" : "general",
+    ...(isAcademic ? academicIds : {}),
+    level: levelValues[course.level] || course.level || "beginner",
+    language: languageValues[course.language] || course.language || "ar",
+    pricingType: course.pricingType || "free",
+    ...(course.pricingType === "paid" ? { price: Number(course.price), discountPercent: Number(course.discountPercent || 0) } : {}),
+  };
+};
+
+const responseCourse = (response) => {
+  const data = response?.data?.data ?? response?.data ?? response;
+  return data?.course || data;
+};
+
+export const fetchAdminCourse = async (id) => {
+  const responses = await Promise.allSettled([
+    getMyTeacherCourse(id),
+    getPublicCourse(id),
+    getPendingAdminCourses(),
+    getPublicCourses(),
+  ]);
+  for (const result of responses) {
+    if (result.status !== "fulfilled") continue;
+    const direct = responseCourse(result.value);
+    if (direct?._id || direct?.id) return enrichCourseInstructor(normalizeCourse(direct));
+    const match = listOf(result.value).find((item) => String(item._id || item.id) === String(id));
+    if (match) return enrichCourseInstructor(normalizeCourse(match));
+  }
+  throw new Error("لم يتم العثور على الدورة");
+};
+
+export const saveCourseToApi = async ({ course, courseId, submit = false, onProgress = () => {} }) => {
+  onProgress({ label: "جاري حفظ بيانات الدورة", percent: 0 });
+  const response = courseId
+    ? await updateMarketplaceCourse(courseId, coursePayload(course))
+    : await createMarketplaceCourse(coursePayload(course));
+  const saved = responseCourse(response);
+  const id = saved?._id || saved?.id || courseId;
+  if (!id) throw new Error("لم يُرجع الخادم معرّف الدورة");
+
+  const progressHandler = (label) => (event) => {
+    const percent = event.total ? Math.round((event.loaded * 100) / event.total) : 0;
+    onProgress({ label, percent });
+  };
+  if (course.cover?.file) await uploadCourseCover(id, course.cover.file, progressHandler("جاري رفع صورة الغلاف"));
+  if (course.promoVideo?.file) await uploadCoursePromoVideo(id, course.promoVideo.file, progressHandler("جاري رفع الفيديو الترويجي"));
+
+  let storedSections = [];
+  if (courseId) {
+    try {
+      const detail = responseCourse(await getMyTeacherCourse(id));
+      storedSections = detail?.sections || detail?.curriculum || [];
+    } catch {
+      storedSections = [];
+    }
+  }
+
+  for (let sectionIndex = 0; sectionIndex < course.curriculum.length; sectionIndex += 1) {
+      const section = course.curriculum[sectionIndex];
+      let savedSection = storedSections[sectionIndex];
+      if (!savedSection) {
+        const sectionResponse = await createCourseSection(id, {
+          title: section.title,
+          description: section.description || "",
+        });
+        savedSection = responseCourse(sectionResponse)?.section || responseCourse(sectionResponse);
+      }
+      const sectionId = savedSection?._id || savedSection?.id;
+      if (!sectionId) continue;
+      const storedLessons = savedSection.lessons || [];
+      for (let lessonIndex = 0; lessonIndex < section.lessons.length; lessonIndex += 1) {
+        const lesson = section.lessons[lessonIndex];
+        let savedLesson = storedLessons[lessonIndex];
+        if (!savedLesson) {
+          const lessonResponse = await createCourseLesson(id, sectionId, {
+            title: lesson.title,
+            description: lesson.description || "",
+            contentType: ({ "فيديو": "video", "ملف": "document", "صوت": "audio", "مستند": "document" })[lesson.type] || String(lesson.type || "video").toLowerCase(),
+            isPreview: Boolean(lesson.preview),
+          });
+          savedLesson = responseCourse(lessonResponse)?.lesson || responseCourse(lessonResponse);
+        }
+        const lessonId = savedLesson?._id || savedLesson?.id;
+        if (lessonId && lesson.media?.file) {
+          const contentType = lesson.media.file.type?.startsWith("video/") ? "video" : "document";
+          await uploadCourseLessonMedia(
+            id,
+            lessonId,
+            lesson.media.file,
+            contentType,
+            progressHandler(`جاري رفع محتوى الدرس: ${lesson.title}`),
+          );
+        }
+      }
+  }
+  if (submit) {
+    onProgress({ label: "جاري إرسال الدورة للمراجعة", percent: 100 });
+    try {
+      await submitMarketplaceCourse(id);
+    } catch (error) {
+      error.savedCourseId = id;
+      throw error;
+    }
+  }
+  return normalizeCourse(saved || { ...course, _id: id });
+};
