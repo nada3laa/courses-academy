@@ -401,6 +401,8 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
           academicGrade: item.academicGradeId || "",
           subject: item.subjectId || "",
           titleEn: item.titleEn || item.title,
+          requirements: Array.isArray(item.requirements) ? item.requirements.join("\n") : item.requirements || "",
+          targetAudience: Array.isArray(item.targetAudience) ? item.targetAudience.join("\n") : item.targetAudience || "",
           tags: item.tags || [],
           curriculum: item.curriculum || [],
           cover: item.coverImage ? { name: "صورة الغلاف", previewUrl: item.coverImage } : "",
@@ -470,6 +472,34 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
 
   const save = async (status = course.status) => {
     if (saving) return;
+    if (status === 'قيد المراجعة') {
+      const missing = [];
+      if (!course.title.trim()) missing.push('عنوان الدورة بالعربية');
+      if (!course.titleEn.trim()) missing.push('عنوان الدورة بالإنجليزية');
+      if (!course.category) missing.push('التصنيف');
+      if (!course.level) missing.push('المستوى');
+      if (!course.description?.trim()) missing.push('وصف الدورة');
+      if (!course.cover?.file && !course.cover?.previewUrl && !course.coverImage) missing.push('صورة الغلاف');
+      if (course.academicCurriculum && !course.academicStage) missing.push('المرحلة');
+      if (course.academicCurriculum && !course.academicGrade) missing.push('الصف');
+      if (course.academicCurriculum && !course.subject) missing.push('المادة');
+      if (!course.curriculum.length) missing.push('قسم واحد على الأقل');
+      course.curriculum.forEach((section, sectionIndex) => {
+        if (!section.title?.trim()) missing.push(`عنوان القسم ${sectionIndex + 1}`);
+        if (!section.lessons?.length) missing.push(`درس داخل القسم ${sectionIndex + 1}`);
+        section.lessons?.forEach((lesson, lessonIndex) => {
+          if (!lesson.title?.trim()) missing.push(`عنوان الدرس ${lessonIndex + 1} في القسم ${sectionIndex + 1}`);
+          if (lesson.type !== 'اختبار' && !lesson.media?.file && !lesson.media?.url && !lesson.media?.originalName) {
+            missing.push(`محتوى الدرس «${lesson.title || lessonIndex + 1}»`);
+          }
+        });
+      });
+      if (course.pricingType === 'paid' && Number(course.price) <= 0) missing.push('سعر الدورة');
+      if (missing.length) {
+        toast.error(`البيانات الناقصة: ${[...new Set(missing)].join('، ')}`, { duration: 7000 });
+        return;
+      }
+    }
     if (!course.title.trim() || !course.titleEn.trim() || !course.category || !course.level) {
       toast.error("أكمل عنوان الدورة بالعربية والإنجليزية والتصنيف والمستوى قبل الحفظ");
       setStep(0);
@@ -979,7 +1009,7 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
                   >
                     حفظ التعديلات
                   </button>
-                ) : !existingCourse ? (
+                ) : !existingCourse && isAdminFlow ? (
                   <button type="button" disabled={saving} onClick={() => save("مسودة")} className="w-full rounded-lg border border-[#D0D5DD] px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-5">{saving ? "جاري الحفظ..." : "حفظ كمسودة"}</button>
                 ) : null}
                 {step < 3 ? (

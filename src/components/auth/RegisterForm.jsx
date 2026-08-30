@@ -12,6 +12,7 @@ import {
   getCountries,
   createInstructorProfile,
 } from "../../services/APIService";
+import { INSTRUCTOR_AGREEMENT_VERSION } from "../../config/instructor";
 import { AuthContext } from "../../context/AuthContext";
 
 const OTP_LENGTH = 6;
@@ -524,7 +525,7 @@ const RegisterForm = ({ type }) => {
       if (type === "instructor") {
         const profileResponse = await createInstructorProfile({
           agreementAccepted: true,
-          agreementVersion: "1.0",
+          agreementVersion: INSTRUCTOR_AGREEMENT_VERSION,
           headline: `محاضر في الأكاديمية - ${formData.fullName.trim()}`,
           bio: `محاضر يقدم دورات تعليمية متخصصة عبر منصة الأكاديمية.`,
         });

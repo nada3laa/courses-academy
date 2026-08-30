@@ -4,8 +4,7 @@ import toast from "react-hot-toast";
 import { BookOpen, Check, ChevronDown, ChevronLeft, FileText, Globe2, LoaderCircle, LockKeyhole, Video } from "lucide-react";
 import pythonCover from "../assets/courses/python-course.png";
 import { AuthContext } from "../context/AuthContext";
-import { fetchPublicCourse } from "../features/course-management/api/coursesApi";
-import { enrollInCourse, isEnrolledInCourse } from "../utils/courseEnrollments";
+import { enrollFreeCourse, fetchCourseAccess, fetchPublicCourse } from "../features/course-management/api/coursesApi";
 
 export default function CourseDetailsPage() {
   const { slug } = useParams();
@@ -15,33 +14,51 @@ export default function CourseDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openSection, setOpenSection] = useState(0);
+  const [enrolled, setEnrolled] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     fetchPublicCourse(slug)
-      .then((item) => active && setCourse(item))
+      .then(async (item) => {
+        if (!active) return;
+        setCourse(item);
+        if (user && item.id) {
+          try {
+            const access = await fetchCourseAccess(item.id);
+            if (active) setEnrolled(Boolean(access?.hasAccess ?? access?.access ?? access?.enrolled));
+          } catch { /* The public detail remains usable when access lookup is unavailable. */ }
+        }
+      })
       .catch((err) => active && setError(err?.response?.data?.message || "لم يتم العثور على الدورة."))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [slug]);
+  }, [slug, user]);
 
   if (loading) return <PageState><LoaderCircle className="animate-spin" />جاري تحميل تفاصيل الدورة...</PageState>;
   if (error || !course?.id) return <PageState><BookOpen /><span>{error || "لم يتم العثور على الدورة."}</span><Link to="/courses" className="font-bold text-[#123C91]">العودة إلى الدورات</Link></PageState>;
 
-  const enrolled = isEnrolledInCourse(user, course.slug);
   const sections = course.curriculum || [];
   const lessonsCount = course.lessons || sections.reduce((total, section) => total + section.lessons.length, 0);
-  const subscribe = () => {
+  const subscribe = async () => {
     if (!user) {
       toast.error("سجّل الدخول أولًا للاشتراك في الدورة");
       navigate("/login", { state: { from: `/courses/${course.slug}` } });
     } else if (enrolled) navigate("/student-dashboard/courses");
     else if (course.price > 0) navigate(`/payment/courses/${course.slug}`);
     else {
-      enrollInCourse(user, course.slug);
-      toast.success("تم الاشتراك في الدورة بنجاح");
-      navigate("/student-dashboard/courses");
+      try {
+        setSubmitting(true);
+        await enrollFreeCourse(course.id);
+        setEnrolled(true);
+        toast.success("تم الاشتراك في الدورة بنجاح");
+        navigate("/student-dashboard/courses");
+      } catch (requestError) {
+        toast.error(requestError?.response?.data?.message || "تعذر الاشتراك في الدورة");
+      } finally {
+        setSubmitting(false);
+      }
     }
   };
 
@@ -74,10 +91,10 @@ export default function CourseDetailsPage() {
         </main>
         <aside className="order-first rounded-xl border bg-white p-7 shadow-sm lg:order-none lg:sticky lg:top-5">
           <h1 className="text-2xl font-extrabold leading-10">{course.title}</h1>
-          <p className="mt-2 font-semibold text-[#123C91]">{course.instructor}</p>
+          {course.instructorSlug ? <Link to={`/instructors/${course.instructorSlug}`} className="mt-2 block font-semibold text-[#123C91]">{course.instructor}</Link> : <p className="mt-2 font-semibold text-[#123C91]">{course.instructor}</p>}
           <div className="my-6 border-y py-5 text-center"><small className="block text-[#8B95A1]">السعر</small><strong className="text-2xl text-[#123C91]">{course.price ? `${course.price} ج.م` : "مجاني"}</strong></div>
           <ul className="mb-6 space-y-3 text-sm text-[#5F6A78]"><li className="flex gap-2"><BookOpen size={17} />{lessonsCount} درس</li><li className="flex gap-2"><Globe2 size={17} />{course.language}</li><li className="flex gap-2"><Check size={17} />{course.level}</li></ul>
-          <button type="button" onClick={subscribe} className="h-12 w-full rounded-md bg-[#123C91] font-bold text-white">{enrolled ? "اذهب إلى دوراتي" : "اشترك في الدورة الآن"}</button>
+          <button type="button" onClick={subscribe} disabled={submitting} className="h-12 w-full rounded-md bg-[#123C91] font-bold text-white disabled:opacity-60">{submitting ? "جاري الاشتراك..." : enrolled ? "اذهب إلى دوراتي" : "اشترك في الدورة الآن"}</button>
         </aside>
       </div>
     </div>

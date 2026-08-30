@@ -8,7 +8,7 @@ import {
   getPendingAdminCourses,
   approveMarketplaceCourse,
   rejectMarketplaceCourse,
-  deleteMarketplaceCourse,
+  archiveCourse,
   getCourseCategories,
   createCourseCategory,
   createMarketplaceCourse,
@@ -17,6 +17,8 @@ import {
   uploadCoursePromoVideo,
   createCourseSection,
   createCourseLesson,
+  updateCourseSection,
+  updateCourseLesson,
   uploadCourseLessonMedia,
   submitMarketplaceCourse,
   getTeachers,
@@ -24,6 +26,11 @@ import {
   getUser,
   getMyInstructorProfile,
   getMyProfile,
+  getPublicInstructor,
+  enrollInMarketplaceCourse,
+  getCourseAccess,
+  getCourseLearningView,
+  getAdminCourse,
 } from "../../../services/APIService";
 
 const valueOf = (value, fallback = "") => {
@@ -57,6 +64,30 @@ const levelLabels = {
   intermediate: "متوسط",
   advanced: "متقدم",
   all: "جميع المستويات",
+  all_levels: "جميع المستويات",
+};
+
+const languageLabels = { ar: "العربية", en: "الإنجليزية" };
+const arrayOfText = (value) => Array.isArray(value)
+  ? value.map((item) => textOf(item)).filter(Boolean)
+  : value ? [textOf(value)] : [];
+
+const normalizeInstructor = (profile = {}, account = null) => {
+  const user = account || (typeof profile.user === "object" ? profile.user : {});
+  const name = textOf(user.fullName || user.name || profile.fullName || profile.name, "المحاضر");
+  return {
+    ...profile,
+    id: profile.id || profile._id,
+    profileSlug: profile.profileSlug || profile.slug || user.username || "",
+    name,
+    fullName: name,
+    headline: textOf(profile.headline),
+    bio: textOf(profile.bio),
+    status: profile.status || "active",
+    avatar: getAssetUrl(user.profileImage || user.avatar || profile.profileImage || profile.avatar),
+    profileImage: getAssetUrl(user.profileImage || user.avatar || profile.profileImage || profile.avatar),
+    user: { ...user, id: user.id || user._id || (typeof profile.user === "string" ? profile.user : undefined) },
+  };
 };
 
 export const normalizeCourse = (source = {}) => {
@@ -64,6 +95,7 @@ export const normalizeCourse = (source = {}) => {
   const course = source.course || source.courseId || enrollment.course || source;
   const sections = (Array.isArray(course.sections) && course.sections.length ? course.sections : null)
     || (Array.isArray(course.curriculum) ? course.curriculum : null)
+    || (Array.isArray(course.curriculum_sections) ? course.curriculum_sections : null)
     || (Array.isArray(source.sections) ? source.sections : []);
   const lessonCount = course.lessonsCount ?? course.lessonCount ?? sections.reduce(
     (total, section) => total + (section.lessons?.length || 0),
@@ -72,6 +104,12 @@ export const normalizeCourse = (source = {}) => {
   const completedLessons = source.completedLessonsCount ?? source.progress?.completedLessons ?? 0;
   const progress = Number(source.progressPercentage ?? source.progress?.percentage ?? source.progress ?? 0);
   const instructor = course.instructor || course.teacher || course.createdBy || {};
+  const normalizedInstructor = typeof instructor === "object" && instructor !== null
+    ? normalizeInstructor(instructor)
+    : null;
+  const rejectionReview = [...(course.reviewHistory || [])]
+    .reverse()
+    .find((entry) => entry.action === "rejected");
   const category = course.category || {};
   const price = Number(course.price?.amount ?? course.price ?? 0);
   const studentsData = Array.isArray(course.enrollments) ? course.enrollments
@@ -107,12 +145,13 @@ export const normalizeCourse = (source = {}) => {
     categoryId: category._id || category.id || (typeof course.category === "string" ? course.category : ""),
     classification: String(valueOf(course.courseType, valueOf(category, "عام"))),
     level: levelLabels[course.level] || valueOf(course.level, "جميع المستويات"),
-    language: valueOf(course.language, "العربية"),
-    instructor: String(valueOf(instructor, "الأكاديمية")),
-    instructorDetails: typeof instructor === "object" && instructor !== null
-      ? instructor
+    language: languageLabels[course.language] || valueOf(course.language, "العربية"),
+    instructor: normalizedInstructor?.name || String(valueOf(instructor, "الأكاديمية")),
+    instructorDetails: normalizedInstructor
+      ? normalizedInstructor
       : { name: textOf(instructor, "الأكاديمية") },
     instructorId: instructor._id || instructor.id || (typeof course.instructor === "string" ? course.instructor : ""),
+    instructorSlug: normalizedInstructor?.profileSlug || "",
     academicCurriculumId: entityId(academicCurriculum),
     academicStageId: entityId(academicStage),
     academicGradeId: entityId(academicGrade),
@@ -129,12 +168,13 @@ export const normalizeCourse = (source = {}) => {
     academicGrade: textOf(academicGrade),
     subject: textOf(academicSubject),
     shortDescription: textOf(course.shortDescription),
-    requirements: textOf(course.requirements),
-    targetAudience: textOf(course.targetAudience),
+    requirements: arrayOfText(course.requirements),
+    targetAudience: arrayOfText(course.targetAudience),
     outcomes: course.outcomes || course.learningOutcomes || course.whatYouWillLearn || [],
     tags: course.tags || [],
     pricingType: course.pricingType || (price > 0 ? "paid" : "free"),
-    discountPercent: Number(course.discountPercent || course.discount || 0),
+    discountPercent: Number(course.discountPercentage ?? course.discountPercent ?? course.discount ?? 0),
+    effectivePrice: Number(course.effectivePrice ?? price),
     promoVideoUrl: getAssetUrl(course.promoVideo?.url || course.promoVideo || course.previewVideo),
     price: course.pricingType === "free" ? 0 : price,
     duration: Number(course.durationHours ?? course.totalDurationHours ?? course.duration ?? 0),
@@ -148,9 +188,13 @@ export const normalizeCourse = (source = {}) => {
     reviewsData,
     transactions,
     status: statusLabels[course.status] || valueOf(course.status, "مسودة"),
+    rejectionReason: course.rejectionReason || rejectionReview?.notes || "",
+    rejectedReason: course.rejectedReason || course.rejectionReason || rejectionReview?.notes || "",
+    rawStatus: course.status ?? null,
     featured: Boolean(course.featured ?? course.isFeatured),
     coverImage: getAssetUrl(course.coverImage?.url || course.coverImage || course.thumbnail),
     sections,
+    quizzes: Array.isArray(course.quizzes) ? course.quizzes : [],
     curriculum: sections.map((section) => ({
       ...section,
       id: section._id || section.id,
@@ -160,10 +204,20 @@ export const normalizeCourse = (source = {}) => {
         id: lesson._id || lesson.id,
         title: valueOf(lesson.title),
         type: ({ video: "فيديو", document: "ملف", file: "ملف", audio: "صوت", quiz: "اختبار", exam: "اختبار" })[lesson.type || lesson.contentType] || lesson.type || lesson.contentType || "فيديو",
-        duration: Number(lesson.durationMinutes ?? lesson.duration ?? 0),
+        duration: Number(lesson.durationMinutes ?? lesson.duration ?? (lesson.durationSeconds != null ? lesson.durationSeconds / 60 : 0)),
         preview: Boolean(lesson.isPreview),
-        media: lesson.media?.url || lesson.mediaUrl || lesson.videoUrl || lesson.fileUrl
+        legacyMedia: lesson.media?.url || lesson.mediaUrl || lesson.videoUrl || lesson.fileUrl || lesson.primaryContent
           ? { name: lesson.media?.name || lesson.fileName || "محتوى الدرس", url: getAssetUrl(lesson.media?.url || lesson.mediaUrl || lesson.videoUrl || lesson.fileUrl) }
+          : null,
+        media: lesson.media?.url || lesson.mediaUrl || lesson.videoUrl || lesson.fileUrl || lesson.primaryContent
+          ? {
+              ...lesson.primaryContent,
+              name: lesson.primaryContent?.originalName || lesson.media?.name || lesson.fileName || 'محتوى الدرس',
+              originalName: lesson.primaryContent?.originalName,
+              url: getAssetUrl(lesson.media?.url || lesson.mediaUrl || lesson.videoUrl || lesson.fileUrl || lesson.primaryContent?.url || lesson.primaryContent?.path || lesson.primaryContent?.secureUrl) || (lesson.primaryContent ? '#stored' : null),
+              previewUrl: getAssetUrl(lesson.media?.url || lesson.mediaUrl || lesson.videoUrl || lesson.fileUrl || lesson.primaryContent?.url || lesson.primaryContent?.path || lesson.primaryContent?.secureUrl),
+              persisted: Boolean(lesson.primaryContent || lesson.mediaUrl || lesson.videoUrl || lesson.fileUrl),
+            }
           : null,
         attachments: (lesson.attachments || []).map((file) => ({
           ...file,
@@ -190,9 +244,8 @@ const uniqueCourses = (courses) => Array.from(
 
 const enrichCourseInstructor = async (course) => {
   const current = course.instructorDetails || {};
-  const currentName = textOf(current.name || current.fullName || current.user?.fullName);
+  if (current.profileSlug && typeof current.user === "object" && current.user?.fullName) return course;
   const instructorId = course.instructorId || current._id || current.id;
-  if (currentName && currentName !== String(instructorId || "")) return course;
   if (!instructorId) return course;
 
   try {
@@ -268,17 +321,61 @@ const enrichCourseInstructor = async (course) => {
   }
 };
 
+const enrichWithMyInstructorProfile = async (course) => {
+  try {
+    const [profileResponse, accountResponse] = await Promise.all([
+      getMyInstructorProfile(),
+      getMyProfile().catch(() => null),
+    ]);
+    const profileData = profileResponse?.data?.data ?? profileResponse?.data ?? profileResponse;
+    const accountData = accountResponse?.data?.data ?? accountResponse?.data ?? accountResponse;
+    const profile = profileData?.instructor || profileData;
+    const account = accountData?.user || accountData || null;
+    const instructor = normalizeInstructor(profile, account);
+    return {
+      ...course,
+      instructor: instructor.name,
+      instructorId: instructor.id || course.instructorId,
+      instructorSlug: instructor.profileSlug,
+      instructorDetails: instructor,
+    };
+  } catch {
+    return enrichCourseInstructor(course);
+  }
+};
+
 export const fetchPublicCourses = async (params) =>
   listOf(await getPublicCourses(params)).map(normalizeCourse);
 
 export const fetchPublicCourse = async (slug) =>
   normalizeCourse(responseCourse(await getPublicCourse(slug)));
 
+export const fetchPublicInstructor = async (slug) => {
+  const response = await getPublicInstructor(slug);
+  const data = response?.data?.data ?? response?.data ?? response;
+  return normalizeInstructor(data?.instructor || data);
+};
+
+export const enrollFreeCourse = async (courseId) => {
+  const response = await enrollInMarketplaceCourse(courseId);
+  return response?.data?.data ?? response?.data ?? response;
+};
+
+export const fetchCourseAccess = async (courseId) => {
+  const response = await getCourseAccess(courseId);
+  return response?.data?.data ?? response?.data ?? response;
+};
+
+export const fetchCourseLearningView = async (courseId) => {
+  const response = await getCourseLearningView(courseId);
+  return response?.data?.data ?? response?.data ?? response;
+};
+
 export const fetchTeacherCourses = async (params) =>
   listOf(await getMyTeacherCourses(params)).map(normalizeCourse);
 
 export const fetchTeacherCourse = async (id) =>
-  enrichCourseInstructor(normalizeCourse(responseCourse(await getMyTeacherCourse(id))));
+  enrichWithMyInstructorProfile(normalizeCourse(responseCourse(await getMyTeacherCourse(id))));
 
 export const fetchStudentCourses = async (params) =>
   listOf(await getMyCourseEnrollments(params)).map(normalizeCourse);
@@ -294,17 +391,18 @@ export const fetchAdminCourses = async (params) => {
   );
 };
 
-export const removeTeacherCourse = (courseId) => deleteMarketplaceCourse(courseId);
+// The API lifecycle archives courses and does not expose DELETE /courses/:id.
+export const removeTeacherCourse = (courseId) => archiveCourse(courseId);
 
-export const approveCourse = async (courseId) =>
-  normalizeCourse(responseCourse(await approveMarketplaceCourse(courseId)));
+export const approveCourse = async (courseId, notes = "") =>
+  normalizeCourse(responseCourse(await approveMarketplaceCourse(
+    courseId,
+    notes.trim() ? { notes: notes.trim() } : {},
+  )));
 
 export const rejectCourse = async (courseId, reason, details = "") =>
   normalizeCourse(responseCourse(await rejectMarketplaceCourse(courseId, {
-    reason,
-    details,
-    rejectionReason: reason,
-    rejectionDetails: details,
+    notes: [reason, details].map((value) => value?.trim()).filter(Boolean).join(" — "),
   })));
 
 export const fetchCourseCategories = async () => listOf(await getCourseCategories());
@@ -359,6 +457,11 @@ const responseCourse = (response) => {
 };
 
 export const fetchAdminCourse = async (id) => {
+  try {
+    return enrichCourseInstructor(normalizeCourse(responseCourse(await getAdminCourse(id))));
+  } catch (adminError) {
+    if (![401, 403, 404].includes(adminError?.response?.status)) throw adminError;
+  }
   const responses = await Promise.allSettled([
     getMyTeacherCourse(id),
     getPublicCourse(id),
@@ -377,11 +480,28 @@ export const fetchAdminCourse = async (id) => {
 
 export const saveCourseToApi = async ({ course, courseId, submit = false, onProgress = () => {} }) => {
   onProgress({ label: "جاري حفظ بيانات الدورة", percent: 0 });
-  const response = courseId
-    ? await updateMarketplaceCourse(courseId, coursePayload(course))
-    : await createMarketplaceCourse(coursePayload(course));
-  const saved = responseCourse(response);
-  const id = saved?._id || saved?.id || courseId;
+  const payload = coursePayload(course);
+  if (payload.discountPercent !== undefined) {
+    payload.discountPercentage = payload.discountPercent;
+    delete payload.discountPercent;
+  }
+  let response;
+  let id = courseId;
+  if (courseId) {
+    response = await updateMarketplaceCourse(courseId, payload);
+  } else {
+    response = await createMarketplaceCourse({
+      title: payload.title,
+      category: payload.category,
+      courseType: payload.courseType,
+      pricingType: payload.pricingType,
+    });
+    const created = responseCourse(response);
+    id = created?._id || created?.id;
+    if (id) response = await updateMarketplaceCourse(id, payload);
+  }
+  let saved = responseCourse(response);
+  id = saved?._id || saved?.id || id;
   if (!id) throw new Error("لم يُرجع الخادم معرّف الدورة");
 
   const progressHandler = (label) => (event) => {
@@ -403,7 +523,16 @@ export const saveCourseToApi = async ({ course, courseId, submit = false, onProg
 
   for (let sectionIndex = 0; sectionIndex < course.curriculum.length; sectionIndex += 1) {
       const section = course.curriculum[sectionIndex];
-      let savedSection = storedSections[sectionIndex];
+      let savedSection = storedSections.find(
+        (item) => String(item._id || item.id) === String(section._id || section.id),
+      );
+      const existingSectionId = savedSection?._id || savedSection?.id;
+      if (existingSectionId) {
+        await updateCourseSection(id, existingSectionId, {
+          title: section.title,
+          description: section.description || '',
+        });
+      }
       if (!savedSection) {
         const sectionResponse = await createCourseSection(id, {
           title: section.title,
@@ -416,7 +545,17 @@ export const saveCourseToApi = async ({ course, courseId, submit = false, onProg
       const storedLessons = savedSection.lessons || [];
       for (let lessonIndex = 0; lessonIndex < section.lessons.length; lessonIndex += 1) {
         const lesson = section.lessons[lessonIndex];
-        let savedLesson = storedLessons[lessonIndex];
+        let savedLesson = storedLessons.find(
+          (item) => String(item._id || item.id) === String(lesson._id || lesson.id),
+        );
+        const existingLessonId = savedLesson?._id || savedLesson?.id;
+        if (existingLessonId) {
+          await updateCourseLesson(id, existingLessonId, {
+            title: lesson.title,
+            description: lesson.description || '',
+            isPreview: Boolean(lesson.preview),
+          });
+        }
         if (!savedLesson) {
           const lessonResponse = await createCourseLesson(id, sectionId, {
             title: lesson.title,
@@ -442,7 +581,8 @@ export const saveCourseToApi = async ({ course, courseId, submit = false, onProg
   if (submit) {
     onProgress({ label: "جاري إرسال الدورة للمراجعة", percent: 100 });
     try {
-      await submitMarketplaceCourse(id);
+      const submitResponse = await submitMarketplaceCourse(id);
+      saved = responseCourse(submitResponse) || saved;
     } catch (error) {
       error.savedCourseId = id;
       throw error;

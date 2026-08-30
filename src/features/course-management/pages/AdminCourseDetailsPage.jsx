@@ -106,14 +106,14 @@ const OverviewTab = ({ course, coverSrc, totalLessons }) => {
         <div className="my-5 border-t border-[#EAECF0]" />
         <h3 className="mb-3 text-[16px] font-bold text-[#1F2937] sm:text-[17px]">لمن هذه الدورة</h3>
         <div className="flex flex-wrap gap-2">
-          {(course.targetAudience ? [course.targetAudience] : ["المبتدئون في البرمجة", "المتعلمون"]).map((item) => (
+          {(Array.isArray(course.targetAudience) ? course.targetAudience : course.targetAudience ? [course.targetAudience] : ["المبتدئون في البرمجة", "المتعلمون"]).map((item) => (
             <span key={item} className="rounded-full bg-[#EAF2FF] px-3 py-1.5 text-xs text-[#3567C8]">{item}</span>
           ))}
         </div>
 
         <h3 className="mt-5 mb-3 text-[16px] font-bold text-[#1F2937] sm:text-[17px]">المتطلبات</h3>
         <div className="flex flex-wrap gap-2">
-          {(course.requirements ? [course.requirements] : ["جهاز كمبيوتر", "اتصال بالإنترنت"]).map((item) => (
+          {(Array.isArray(course.requirements) ? course.requirements : course.requirements ? [course.requirements] : ["جهاز كمبيوتر", "اتصال بالإنترنت"]).map((item) => (
             <span key={item} className="rounded-full border border-[#D0D5DD] px-3 py-1.5 text-[13px] text-[#667085] sm:text-[14px]">{item}</span>
           ))}
         </div>
@@ -775,6 +775,7 @@ const AdminCourseDetailsPage = () => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectDetails, setRejectDetails] = useState("");
+  const [approveNotes, setApproveNotes] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [course, setCourse] = useState(() => getTeacherCourse(courseId));
   const [loading, setLoading] = useState(true);
@@ -835,14 +836,14 @@ const AdminCourseDetailsPage = () => {
             <p className="mt-2 text-xs text-[#667085]">{course.shortDescription || course.description}</p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            {course.status !== "منشور" ? (
+            {isPendingReview ? (
               <>
                 <button onClick={() => setShowApproveModal(true)} className="w-full rounded-md bg-[#17864B] px-4 py-2 text-sm font-semibold text-white sm:w-auto">اعتماد ونشر</button>
                 <button onClick={() => setShowRejectModal(true)} className="w-full rounded-md bg-[#D92D20] px-4 py-2 text-sm font-semibold text-white sm:w-auto">رفض</button>
               </>
-            ) : (
+            ) : course.status === "منشور" ? (
               <button type="button" onClick={() => navigate(`/admin/courses/${course.id}/edit`)} className="w-full rounded-md bg-[#123C91] px-5 py-2.5 text-sm font-semibold text-white sm:w-auto">تعديل الدورة</button>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -883,15 +884,20 @@ const AdminCourseDetailsPage = () => {
             <div className="w-full max-w-sm rounded-xl bg-white p-5 text-right">
               <h3 className="mb-2 text-lg font-semibold">اعتماد الدورة للنشر؟</h3>
               <p className="mb-4 text-sm text-[#667085]">سيتم نشر الدورة "{course.title}" على المنصة وإشعار المحاضر. هل تريد المتابعة؟</p>
+              <label className="mb-4 block text-sm text-[#344054]">
+                ملاحظات للمحاضر (اختياري)
+                <textarea value={approveNotes} onChange={(event) => setApproveNotes(event.target.value)} rows={3} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" placeholder="أضف ملاحظات المراجعة إن وجدت..." />
+              </label>
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button onClick={() => setShowApproveModal(false)} className="w-full rounded-md border px-4 py-2 sm:w-auto">إلغاء</button>
                 <button disabled={reviewing} onClick={async () => {
                   setReviewing(true);
                   try {
-                    const updated = await approveCourse(course.id);
+                    const updated = await approveCourse(course.id, approveNotes);
                     setCourse(updated?.id ? updated : { ...course, status: "منشور" });
                     toast.success("تم اعتماد الدورة ونشرها");
                     setShowApproveModal(false);
+                    setApproveNotes("");
                     navigate('/admin/courses');
                   } catch (error) {
                     toast.error(error?.response?.data?.message || "تعذر اعتماد الدورة");

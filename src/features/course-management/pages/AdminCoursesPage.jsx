@@ -170,6 +170,13 @@ const AdminCoursesPage = () => {
       }
     }
     if (action === "delete") {
+      const archivableStatuses = ['draft', 'rejected', 'published'];
+      if (!archivableStatuses.includes(selectedCourse.rawStatus)) {
+        toast.error(selectedCourse.rawStatus === 'pending_review'
+          ? 'لا يمكن أرشفة الدورة وهي قيد المراجعة. انتظري قرار الإدارة أولاً.'
+          : 'لا يمكن أرشفة هذه الدورة في حالتها الحالية.');
+        return;
+      }
       const confirmed = await confirmToast({
         title: "حذف الدورة",
         message: `هل تريد حذف دورة «${selectedCourse.title}»؟ لن تظهر للمعلم أو الطلاب بعد الحذف.`,

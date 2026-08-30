@@ -110,9 +110,55 @@ export const getAccountState = () => API.get("/auth/account-state");
 export const getCountries = () => API.get("/countries");
 
 // Instructor marketplace profile (a separate profile linked to role=user)
-export const createInstructorProfile = (payload) =>
-  API.post("/instructors", payload);
+const isInstructorAgreementVersionError = (error) => {
+  const message = String(error?.response?.data?.message || "").toLowerCase();
+  return error?.response?.status === 400
+    && message.includes("agreement")
+    && message.includes("version");
+};
+
+const agreementVersionFromError = (error) => {
+  const body = error?.response?.data || {};
+  return body.currentAgreementVersion
+    || body.expectedAgreementVersion
+    || body.expectedVersion
+    || body.errors?.agreementVersion?.current
+    || body.errors?.agreementVersion?.expected
+    || "";
+};
+
+export const createInstructorProfile = async (payload) => {
+  const configuredVersion = payload?.agreementVersion;
+  const fallbackVersions = ["2026-08", "2025-01", "2024-01", "1.0"];
+  const versions = [...new Set([configuredVersion, ...fallbackVersions].filter(Boolean))];
+  let lastError;
+
+  for (let index = 0; index < versions.length; index += 1) {
+    try {
+      return await API.post("/instructors", {
+        ...payload,
+        agreementVersion: versions[index],
+      });
+    } catch (error) {
+      lastError = error;
+      if (!isInstructorAgreementVersionError(error)) throw error;
+
+      const expectedVersion = agreementVersionFromError(error);
+      if (expectedVersion && !versions.includes(expectedVersion)) {
+        versions.splice(index + 1, 0, expectedVersion);
+      }
+    }
+  }
+
+  throw lastError;
+};
 export const getMyInstructorProfile = () => API.get("/instructors/me");
+export const updateMyInstructorProfile = (payload) =>
+  API.patch("/instructors/me", payload);
+export const getPublicInstructor = (slug) =>
+  API.get(`/instructors/${encodeURIComponent(slug)}`);
+export const updateInstructorStatus = (id, payload) =>
+  API.patch(`/instructors/${id}/status`, payload);
 
 // Course marketplace
 export const getPublicCourses = (params) => API.get("/courses", { params });
@@ -150,10 +196,90 @@ export const getMyTeacherCourses = (params) => API.get("/courses/me", { params }
 export const getMyTeacherCourse = (id) => API.get(`/courses/me/${id}`);
 export const getMyCourseEnrollments = (params) =>
   API.get("/course-enrollments/me", { params });
+export const enrollInMarketplaceCourse = (courseId) =>
+  API.post(`/courses/${courseId}/enroll`);
+export const getCourseAccess = (courseId) =>
+  API.get(`/courses/${courseId}/access`);
+export const getCourseLearningView = (courseId) =>
+  API.get(`/courses/${courseId}/learn`);
+export const requestLessonMediaAccess = (courseId, lessonId) =>
+  API.post(`/courses/${courseId}/lessons/${lessonId}/media-access`);
+export const getProtectedMediaUrl = (ticket) =>
+  API.defaults.baseURL + '/protected-media/' + encodeURIComponent(ticket);
+export const getCourseProgress = (courseId) =>
+  API.get(`/courses/${courseId}/progress`);
+export const updateCourseLessonProgress = (courseId, lessonId, payload) =>
+  API.patch(`/courses/${courseId}/lessons/${lessonId}/progress`, payload);
+export const completeCourseLesson = (courseId, lessonId) =>
+  API.post(`/courses/${courseId}/lessons/${lessonId}/complete`);
+export const startCoursePurchase = (courseId) =>
+  API.post(`/courses/${courseId}/purchase`);
+export const getCoursePurchase = (courseId) =>
+  API.get(`/courses/${courseId}/purchase`);
+export const getCourseCertificateState = (courseId) =>
+  API.get(`/courses/${courseId}/certificate`);
+export const claimCourseCertificate = (courseId) =>
+  API.post(`/courses/${courseId}/certificate/claim`);
+export const getMyCoursePurchases = (params) =>
+  API.get(`/course-purchases/my`, { params });
+export const getMyCourseCertificates = () => API.get(`/certificates/my`);
+export const getAdminCourseCategories = (params) =>
+  API.get('/course-categories/admin', { params });
+export const updateCourseCategory = (id, payload) =>
+  API.patch(`/course-categories/${id}`, payload);
+export const updateCourseSection = (courseId, sectionId, payload) =>
+  API.patch(`/courses/${courseId}/sections/${sectionId}`, payload);
+export const deleteCourseSection = (courseId, sectionId) =>
+  API.delete(`/courses/${courseId}/sections/${sectionId}`);
+export const reorderCourseSections = (courseId, sectionIds) =>
+  API.patch(`/courses/${courseId}/sections/reorder`, { sectionIds });
+export const updateCourseLesson = (courseId, lessonId, payload) =>
+  API.patch(`/courses/${courseId}/lessons/${lessonId}`, payload);
+export const deleteCourseLesson = (courseId, lessonId) =>
+  API.delete(`/courses/${courseId}/lessons/${lessonId}`);
+export const moveCourseLesson = (courseId, lessonId, sectionId) =>
+  API.patch(`/courses/${courseId}/lessons/${lessonId}/move`, { sectionId });
+export const reorderCourseLessons = (courseId, sectionId, lessonIds) =>
+  API.patch(`/courses/${courseId}/sections/${sectionId}/lessons/reorder`, { lessonIds });
+export const uploadCourseLessonAttachments = (courseId, lessonId, files, onUploadProgress) => {
+  const formData = new FormData();
+  Array.from(files || []).forEach((file) => formData.append('attachments', file));
+  return API.post(`/courses/${courseId}/lessons/${lessonId}/attachments`, formData, {
+    onUploadProgress,
+    timeout: 10 * 60 * 1000,
+  });
+};
+export const deleteCourseLessonAttachment = (courseId, lessonId, attachmentId) =>
+  API.delete(`/courses/${courseId}/lessons/${lessonId}/attachments/${attachmentId}`);
+export const requestLessonAttachmentAccess = (courseId, lessonId, attachmentId) =>
+  API.post(`/courses/${courseId}/lessons/${lessonId}/attachments/${attachmentId}/access`);
+export const cancelCoursePurchase = (courseId) => API.post(`/courses/${courseId}/purchase/cancel`);
+export const getAdminCoursePurchases = (params) => API.get('/course-purchases/admin', { params });
+export const getAdminCoursePurchase = (id) => API.get(`/course-purchases/admin/${id}`);
+export const getAdminCourseEnrollments = (params) => API.get('/course-enrollments/admin', { params });
+export const grantAdminCourseEnrollment = (payload) => API.post('/course-enrollments/admin/grant', payload);
+export const revokeAdminCourseEnrollment = (id) => API.delete(`/course-enrollments/admin/${id}`);
+export const createCourseQuiz = (courseId, payload) => API.post(`/courses/${courseId}/quizzes`, payload);
+export const getCourseQuiz = (courseId, quizId) => API.get(`/courses/${courseId}/quizzes/${quizId}`);
+export const updateCourseQuiz = (courseId, quizId, payload) => API.patch(`/courses/${courseId}/quizzes/${quizId}`, payload);
+export const deleteCourseQuiz = (courseId, quizId) => API.delete(`/courses/${courseId}/quizzes/${quizId}`);
+export const reorderCourseQuizzes = (courseId, quizIds) => API.patch(`/courses/${courseId}/quizzes/reorder`, { quizIds });
+export const addCourseQuizQuestion = (courseId, quizId, payload) => API.post(`/courses/${courseId}/quizzes/${quizId}/questions`, payload);
+export const updateCourseQuizQuestion = (courseId, quizId, questionId, payload) => API.patch(`/courses/${courseId}/quizzes/${quizId}/questions/${questionId}`, payload);
+export const deleteCourseQuizQuestion = (courseId, quizId, questionId) => API.delete(`/courses/${courseId}/quizzes/${quizId}/questions/${questionId}`);
+export const reorderCourseQuizQuestions = (courseId, quizId, questionIds) => API.patch(`/courses/${courseId}/quizzes/${quizId}/questions/reorder`, { questionIds });
+export const submitCourseQuizAttempt = (courseId, quizId, payload) => API.post(`/courses/${courseId}/quizzes/${quizId}/attempts`, payload);
+export const getMyCourseQuizAttempts = (courseId, quizId) => API.get(`/courses/${courseId}/quizzes/${quizId}/attempts/me`);
+export const verifyCourseCertificate = (verificationCode) => API.get(`/certificates/verify/${encodeURIComponent(verificationCode)}`);
+export const getCourseCertificate = (id) => API.get(`/certificates/${id}`);
+export const getAdminCourseCertificates = (params) => API.get('/admin/certificates', { params });
+export const getAdminCourseCertificate = (id) => API.get(`/admin/certificates/${id}`);
+export const revokeCourseCertificate = (id, payload) => API.post(`/admin/certificates/${id}/revoke`, payload);
 export const getPendingAdminCourses = (params) =>
   API.get("/courses/admin/pending", { params });
-export const approveMarketplaceCourse = (id) =>
-  API.post(`/courses/admin/${id}/approve`);
+export const getAdminCourse = (id) => API.get(`/courses/admin/${id}`);
+export const approveMarketplaceCourse = (id, payload = {}) =>
+  API.post(`/courses/admin/${id}/approve`, payload);
 export const rejectMarketplaceCourse = (id, payload) =>
   API.post(`/courses/admin/${id}/reject`, payload);
 export const archiveCourse = (id) => API.post(`/courses/${id}/archive`);

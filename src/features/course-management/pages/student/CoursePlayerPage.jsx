@@ -1,143 +1,85 @@
-import { useContext, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import {
-  ArrowLeft, ArrowRight, Award, CheckCircle2, ChevronDown, ChevronLeft,
-  HelpCircle, LockKeyhole, PlayCircle, Star,
-} from "lucide-react";
-import StudentLayout from "../../../../components/student/layout/StudentLayout";
-import { AuthContext } from "../../../../context/AuthContext";
-import { courses } from "../../../../data/staticData";
-import { getCourseContent } from "../../../../data/courseContent";
-import {
-  completeCourseItem, getCourseProgress, isCourseItemUnlocked, updateCourseProgress,
-} from "../../../../utils/courseProgress";
+import { useEffect, useMemo, useState } from 'react';
+import { Award, CheckCircle2, ChevronDown, ChevronLeft, FileText, LoaderCircle, PlayCircle } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import StudentLayout from '../../../../components/student/layout/StudentLayout';
+import { fetchPublicCourse } from '../../api/coursesApi';
+import { claimCourseCertificate, completeCourseLesson, getCourseLearningView, requestLessonMediaAccess } from '../../../../services/APIService';
 
-const flattenContent = (content) => {
-  const items = [];
-  content?.chapters?.forEach((chapter, chapterIndex) => {
-    chapter.lessons?.filter((lesson) => lesson.type !== "quiz").forEach((lesson, lessonIndex) => {
-      items.push({
-        id: `lesson-${chapter.id}-${lesson.id ?? lessonIndex}`,
-        chapterIndex,
-        title: lesson.title || lesson,
-        duration: lesson.duration || "10:00",
-        type: "lesson",
-      });
-    });
-    const quiz = chapter.lessons?.find((lesson) => lesson.type === "quiz");
-    items.push({
-      id: `exam-${chapter.id}`,
-      chapterIndex,
-      title: quiz?.title || `اختبار ${chapter.title}`,
-      duration: quiz?.duration || "15 دقيقة",
-      type: "exam",
-    });
-  });
-  return items;
-};
+const unwrap = (response) => response?.data?.data ?? response?.data ?? response;
+const titleOf = (value) => value?.ar || value?.en || value || 'الدورة';
 
 export default function CoursePlayerPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { user } = useContext(AuthContext);
-  const course = courses.find((item) => item.slug === slug) || courses[0];
-  const content = useMemo(() => getCourseContent(course?.id), [course]);
-  const items = useMemo(() => flattenContent(content), [content]);
-  const [completedIds, setCompletedIds] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [view, setView] = useState(null);
+  const [currentLesson, setCurrentLesson] = useState(null);
+  const [mediaUrl, setMediaUrl] = useState('');
   const [openSection, setOpenSection] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+
+  const load = async () => {
+    const publicCourse = await fetchPublicCourse(slug);
+    const data = unwrap(await getCourseLearningView(publicCourse.id));
+    setView(data);
+    setCurrentLesson((current) => current || data.curriculum?.flatMap((section) => section.lessons || [])[0] || null);
+    return data;
+  };
 
   useEffect(() => {
-    const progress = getCourseProgress(user, slug);
-    setCompletedIds(progress.completedItemIds);
-    const savedIndex = items.findIndex((item) => item.id === progress.currentItemId);
-    setCurrentIndex(savedIndex >= 0 ? savedIndex : 0);
-  }, [items, slug, user]);
+    load().catch((error) => toast.error(error?.response?.data?.message || 'لا يمكنك فتح محتوى هذه الدورة')).finally(() => setLoading(false));
+  }, [slug]);
 
-  const currentItem = items[currentIndex];
-  const progressPercentage = Math.round((completedIds.length / (items.length || 1)) * 100);
-  const unlocked = (index) => isCourseItemUnlocked(items, completedIds, index);
+  useEffect(() => {
+    setMediaUrl('');
+    if (!view?.course?.id || !currentLesson?.id) return;
+    requestLessonMediaAccess(view.course.id, currentLesson.id).then((response) => {
+      const data = unwrap(response);
+      if (data?.url) setMediaUrl(data.url.startsWith('http') ? data.url : `https://api.alacademeya.com${data.url}`);
+    }).catch((error) => toast.error(error?.response?.data?.message || 'تعذر تشغيل محتوى الدرس'));
+  }, [currentLesson?.id, view?.course?.id]);
 
-  const selectItem = (index) => {
-    if (index < 0 || index >= items.length || !unlocked(index)) return;
-    setCurrentIndex(index);
-    updateCourseProgress(user, slug, (progress) => ({ ...progress, currentItemId: items[index].id }));
+  const lessons = useMemo(() => view?.curriculum?.flatMap((section) => section.lessons || []) || [], [view]);
+  const progress = Number(view?.progress?.progressPercentage ?? view?.progress?.percentage ?? 0);
+
+  const completeLesson = async () => {
+    if (!currentLesson || working) return;
+    setWorking(true);
+    try {
+      await completeCourseLesson(view.course.id, currentLesson.id);
+      const updated = await load();
+      const all = updated.curriculum?.flatMap((section) => section.lessons || []) || [];
+      const index = all.findIndex((lesson) => lesson.id === currentLesson.id);
+      if (all[index + 1]) setCurrentLesson(all[index + 1]);
+      toast.success('تم إكمال الدرس');
+    } catch (error) { toast.error(error?.response?.data?.message || 'تعذر إكمال الدرس'); }
+    finally { setWorking(false); }
   };
 
-  const handleNext = () => {
-    if (currentItem?.type === "exam") {
-      navigate(`/exam/${slug}?chapter=${currentItem.chapterIndex}`);
-      return;
-    }
-    const nextItem = items[currentIndex + 1];
-    const progress = completeCourseItem(user, slug, currentItem.id, nextItem?.id || null);
-    setCompletedIds(progress.completedItemIds);
-    if (nextItem) setCurrentIndex(currentIndex + 1);
+  const claimCertificate = async () => {
+    setWorking(true);
+    try { await claimCourseCertificate(view.course.id); navigate(`/certificate/${slug}`); }
+    catch (error) { toast.error(error?.response?.data?.message || 'أكمل جميع الدروس والاختبارات أولاً'); }
+    finally { setWorking(false); }
   };
 
-  return (
-    <StudentLayout>
-      <div dir="rtl" className="min-h-screen bg-white pb-20 text-[#202936]">
-        <div className="mx-auto w-full max-w-[1400px] px-4 pt-6 sm:px-6 lg:px-8">
-          <nav className="mb-6 flex items-center justify-between border-b border-[#EDF0F3] pb-4 text-sm text-[#8B94A0]">
-            <div className="flex items-center gap-2">
-              <Link to="/student-dashboard/courses" className="font-semibold text-[#123C91]">دوراتي</Link>
-              <ChevronLeft size={14} /><span className="text-[#202936]">{course.title}</span>
-            </div>
-            <button className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-bold text-[#123C91]"><Star size={14} /> تقييم</button>
-          </nav>
+  if (loading) return <StudentLayout><div className='grid min-h-[60vh] place-items-center'><LoaderCircle className='animate-spin text-[#123C91]' /></div></StudentLayout>;
+  if (!view) return <StudentLayout><div className='p-10 text-center'>تعذر تحميل الدورة</div></StudentLayout>;
 
-          <div className="grid items-start gap-8 lg:grid-cols-[400px_minmax(0,1fr)]">
-            <aside className="space-y-4 rounded-lg border border-[#DDE3E9] bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-extrabold">محتوى الدورة</h2>
-                <span className="rounded-full bg-[#EAF4FF] px-2.5 py-1 text-xs font-bold text-[#123C91]">{completedIds.length}/{items.length}</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-[#EDF0F3]"><div className="h-full bg-[#12C6B0] transition-all" style={{ width: `${progressPercentage}%` }} /></div>
-
-              {content.chapters.map((chapter, chapterIndex) => {
-                const chapterItems = items.filter((item) => item.chapterIndex === chapterIndex);
-                return <div key={chapter.id} className="overflow-hidden rounded-lg border border-[#DFE5EB]">
-                  <button onClick={() => setOpenSection(openSection === chapterIndex ? -1 : chapterIndex)} className="flex w-full items-center justify-between bg-[#F7F8FA] px-4 py-3 text-right">
-                    <b className="text-sm">{chapter.title}</b><ChevronDown size={16} className={openSection === chapterIndex ? "rotate-180" : ""} />
-                  </button>
-                  {openSection === chapterIndex && <div className="divide-y divide-[#ECF0F3]">
-                    {chapterItems.map((item) => {
-                      const index = items.findIndex((candidate) => candidate.id === item.id);
-                      const isUnlocked = unlocked(index);
-                      const isCompleted = completedIds.includes(item.id);
-                      return <button key={item.id} onClick={() => selectItem(index)} disabled={!isUnlocked} className={`flex w-full items-center justify-between px-4 py-3 text-right text-[13px] ${currentIndex === index ? "bg-[#EAF4FF] font-bold text-[#123C91]" : isUnlocked ? "hover:bg-[#F8FBFF]" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                        <span className="flex items-center gap-2.5">
-                          {isCompleted ? <CheckCircle2 size={16} className="text-[#12C6B0]" /> : !isUnlocked ? <LockKeyhole size={15} /> : item.type === "exam" ? <HelpCircle size={16} /> : <PlayCircle size={16} />}
-                          {item.title}
-                        </span><small>{item.duration}</small>
-                      </button>;
-                    })}
-                  </div>}
-                </div>;
-              })}
-            </aside>
-
-            <main className="space-y-6">
-              <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border bg-black shadow-sm">
-                {currentItem?.type === "exam" ? <div className="text-center text-white"><HelpCircle size={54} className="mx-auto mb-4" /><h2 className="text-xl font-bold">{currentItem.title}</h2><p className="mt-2 text-sm text-white/70">اجتز الاختبار لفتح الوحدة التالية</p></div> :
-                  <iframe className="h-full w-full" src="https://www.youtube.com/embed/dQw4w9WgXcQ" title={currentItem?.title} allowFullScreen />}
-              </div>
-              <div className="flex items-center justify-between rounded-xl border bg-white p-4 shadow-sm">
-                <button onClick={() => selectItem(currentIndex - 1)} disabled={currentIndex === 0} className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold disabled:opacity-40"><ArrowRight size={16} /> السابق</button>
-                <h3 className="px-3 text-center text-sm font-bold">{currentItem?.title}</h3>
-                <button onClick={handleNext} className="flex items-center gap-2 rounded-lg bg-[#123C91] px-5 py-2 text-sm font-bold text-white">
-                  {currentItem?.type === "exam" ? "بدء الاختبار" : "إتمام والدرس التالي"}<ArrowLeft size={16} />
-                </button>
-              </div>
-              <div className="flex items-center justify-between rounded-xl border bg-[#F7FAFC] p-6">
-                <div><h4 className="text-lg font-extrabold">الشهادة</h4><p className="text-sm text-[#657181]">{progressPercentage === 100 ? "تهانينا! يمكنك استلام شهادتك الآن." : "أكمل كل الدروس والاختبارات للحصول على الشهادة."}</p></div>
-                <button disabled={progressPercentage < 100} onClick={() => navigate(`/certificate/${slug}`)} className="flex items-center gap-2 rounded-xl bg-[#12C6B0] px-6 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"><Award size={18} /> الشهادة</button>
-              </div>
-            </main>
-          </div>
-        </div>
+  return <StudentLayout><div dir='rtl' className='min-h-screen bg-white p-4 text-[#202936] sm:p-6'>
+    <div className='mx-auto max-w-[1400px]'><nav className='mb-6 flex gap-2 border-b pb-4 text-sm'><Link to='/student-dashboard/courses' className='font-bold text-[#123C91]'>دوراتي</Link><ChevronLeft size={15} /><span>{titleOf(view.course.title)}</span></nav>
+      <div className='grid items-start gap-7 lg:grid-cols-[360px_1fr]'>
+        <aside className='rounded-xl border bg-white p-4 shadow-sm'><div className='mb-4 flex items-center justify-between'><h2 className='font-extrabold'>محتوى الدورة</h2><b className='text-[#123C91]'>{Math.round(progress)}%</b></div>
+          <div className='mb-5 h-2 overflow-hidden rounded bg-gray-100'><div className='h-full bg-[#12C6B0]' style={{ width: `${progress}%` }} /></div>
+          {view.curriculum?.map((section, index) => <div key={section.id} className='mb-3 overflow-hidden rounded-lg border'><button onClick={() => setOpenSection(openSection === index ? -1 : index)} className='flex w-full justify-between bg-gray-50 p-3 text-right font-bold'>{section.title}<ChevronDown size={17} /></button>{openSection === index && section.lessons?.map((lesson) => <button key={lesson.id} onClick={() => setCurrentLesson(lesson)} className={'flex w-full items-center gap-2 border-t p-3 text-right text-sm ' + (currentLesson?.id === lesson.id ? 'bg-blue-50 text-[#123C91]' : '')}>{lesson.progress?.status === 'completed' ? <CheckCircle2 size={17} className='text-[#12C6B0]' /> : lesson.contentType === 'document' ? <FileText size={17} /> : <PlayCircle size={17} />}{lesson.title}</button>)}</div>)}
+        </aside>
+        <main>
+          <div className='flex aspect-video items-center justify-center overflow-hidden rounded-xl bg-black text-white'>{!mediaUrl ? <LoaderCircle className='animate-spin' /> : currentLesson?.contentType === 'video' ? <video key={mediaUrl} src={mediaUrl} controls className='h-full w-full' /> : currentLesson?.contentType === 'audio' ? <audio src={mediaUrl} controls /> : <a href={mediaUrl} target='_blank' rel='noreferrer' className='rounded-lg bg-white px-6 py-3 font-bold text-[#123C91]'>فتح ملف الدرس</a>}</div>
+          <div className='mt-4 flex items-center justify-between rounded-xl border p-4'><div><h1 className='font-extrabold'>{currentLesson?.title}</h1><p className='mt-1 text-sm text-gray-500'>{currentLesson?.description}</p></div><button onClick={completeLesson} disabled={working || currentLesson?.progress?.status === 'completed'} className='rounded-lg bg-[#123C91] px-5 py-2.5 font-bold text-white disabled:bg-gray-300'>{currentLesson?.progress?.status === 'completed' ? 'مكتمل' : 'إكمال الدرس'}</button></div>
+          <div className='mt-5 flex items-center justify-between rounded-xl border bg-[#F7FAFC] p-5'><div><h2 className='font-extrabold'>شهادة إتمام الدورة</h2><p className='mt-1 text-sm text-gray-500'>{view.certificateEligible || progress >= 100 ? 'شهادتك جاهزة' : 'أكمل الدروس والاختبارات للحصول عليها'}</p></div><button onClick={claimCertificate} disabled={working || (!view.certificateEligible && progress < 100)} className='flex items-center gap-2 rounded-lg bg-[#12C6B0] px-5 py-3 font-bold text-white disabled:bg-gray-300'><Award size={18} />الشهادة</button></div>
+        </main>
       </div>
-    </StudentLayout>
-  );
+    </div>
+  </div></StudentLayout>;
 }

@@ -136,6 +136,13 @@ function App() {
       <Toaster
         position="top-left"
         reverseOrder={false}
+        containerStyle={{
+          top: '50%',
+          left: '50%',
+          right: 'auto',
+          bottom: 'auto',
+          transform: 'translate(-50%, -50%)',
+        }}
         toastOptions={{
           duration: 10000,
           style: { direction: "rtl" },

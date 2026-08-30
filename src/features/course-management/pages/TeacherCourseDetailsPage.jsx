@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   BookOpen,
@@ -112,14 +112,14 @@ const OverviewTab = ({ course, coverSrc, totalLessons }) => {
         <div className="my-5 border-t border-[#EAECF0]" />
         <h3 className="mb-3 text-[17px] font-bold text-[#1F2937]">لمن هذه الدورة</h3>
         <div className="flex flex-wrap gap-2">
-          {(course.targetAudience ? [course.targetAudience] : ["المبتدئون في البرمجة", "المتعلمون"]).map((item) => (
+          {(Array.isArray(course.targetAudience) ? course.targetAudience : course.targetAudience ? [course.targetAudience] : ["المبتدئون في البرمجة", "المتعلمون"]).map((item) => (
             <span key={item} className="rounded-full bg-[#EAF2FF] px-3 py-1.5 text-xs text-[#3567C8]">{item}</span>
           ))}
         </div>
 
         <h3 className="mt-5 mb-3 text-[17px] font-bold text-[#1F2937]">المتطلبات</h3>
         <div className="flex flex-wrap gap-2">
-          {(course.requirements ? [course.requirements] : ["جهاز كمبيوتر", "اتصال بالإنترنت"]).map((item) => (
+          {(Array.isArray(course.requirements) ? course.requirements : course.requirements ? [course.requirements] : ["جهاز كمبيوتر", "اتصال بالإنترنت"]).map((item) => (
             <span key={item} className="rounded-full border border-[#D0D5DD] px-3 py-1.5 text-[14px] text-[#667085]">{item}</span>
           ))}
         </div>
@@ -314,7 +314,7 @@ const InstructorTab = ({ course }) => {
   };
   const name = text(instructor.name || instructor.fullName || instructor.user?.fullName || course.teacherName, "المحاضر");
   const instructorId = instructor.id || instructor._id || instructor.user?.id || instructor.user?._id || course.instructorId;
-  const avatar = instructor.avatar || instructor.profileImage || instructor.user?.avatar;
+  const avatar = instructor.avatar || instructor.profileImage || instructor.user?.profileImage || instructor.user?.avatar;
   const email = text(instructor.email || instructor.user?.email);
   const phone = text(instructor.phone || instructor.phoneNumber || instructor.user?.phone);
   const subject = text(instructor.subject || instructor.specialization || course.subject, "غير محدد");
@@ -323,7 +323,7 @@ const InstructorTab = ({ course }) => {
   const experience = text(instructor.experience || instructor.yearsOfExperience, "غير محددة");
   const joinedAt = instructor.joinedAt || instructor.createdAt;
   const joinedDate = joinedAt ? new Date(joinedAt).toLocaleDateString("ar-EG") : "غير محدد";
-  const bio = text(instructor.bio, `${subject} · ${experience}`);
+  const bio = text(instructor.bio, instructor.headline || `${subject} · ${experience}`);
   const openMessages = () => navigate("/teacher/messages", { state: { openUserId: instructorId, openClassroomId: course.id, openClassroomName: course.title } });
 
   return (

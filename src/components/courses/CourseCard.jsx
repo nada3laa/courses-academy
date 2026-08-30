@@ -50,7 +50,7 @@ export default function CourseCard({ course }) {
       {/* اسم وصورة المحاضر بشكل مميز وواضح */}
         <div className="mb-4 flex items-center gap-2">
           <Link 
-            to={`/instructors/${encodeURIComponent(course.instructor)}`} 
+            to={`/instructors/${encodeURIComponent(course.instructorSlug || course.instructorId || course.instructor)}`} 
             className="flex items-center gap-2 group/inst"
           >
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-linear-to-br from-[#12C6B0] to-[#123C91] text-[13px] font-bold text-white shadow-xs">

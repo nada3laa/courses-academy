@@ -64,6 +64,7 @@ const userDataForStorage = (source) => {
     "accountType",
     "instructorId",
     "instructorStatus",
+    "instructorProfileSlug",
     "timezone",
   ];
 

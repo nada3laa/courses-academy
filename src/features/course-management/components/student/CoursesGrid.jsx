@@ -26,7 +26,7 @@ export default function CoursesGrid({ courses = [], onRate = () => { }, onCancel
         return (
           <article
             key={course.id || course.slug}
-            onClick={() => navigate(`/my-courses/${course.slug}`)}
+            onClick={() => navigate(`/learn/${course.slug}`)}
             className="group cursor-pointer overflow-hidden rounded-xl border border-[#DFE5EC] bg-white shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
           >
             <div className="relative aspect-1.85/1 overflow-hidden bg-[#E8EDF2]">
@@ -51,7 +51,7 @@ export default function CoursesGrid({ courses = [], onRate = () => { }, onCancel
               </Link>
               <div className="mb-4 flex items-center gap-2">
                 <Link
-                  to={`/instructors/${encodeURIComponent(course.instructor)}`}
+                  to={`/instructors/${encodeURIComponent(course.instructorSlug || course.instructorId || course.instructor)}`}
                   className="flex items-center gap-2 group/inst"
                 >
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-linear-to-br from-[#12C6B0] to-[#123C91] text-[13px] font-bold text-white shadow-xs">

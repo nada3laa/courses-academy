@@ -21,6 +21,8 @@ export const confirmToast = ({ title, message, confirmLabel = "تأكيد", dang
           </div>
         </div>
       ),
-      { duration: Infinity },
+      {
+        duration: Infinity,
+      },
     );
   });

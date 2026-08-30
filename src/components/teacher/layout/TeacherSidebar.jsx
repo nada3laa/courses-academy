@@ -1,9 +1,10 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import toast from "react-hot-toast";
 import { AuthContext } from "../../../context/AuthContext";
 import { createInstructorProfile, getMyInstructorProfile } from "../../../services/APIService";
 import { useSidebarUnread } from "../../../api/useSidebarUnread";
+import { INSTRUCTOR_AGREEMENT_VERSION } from "../../../config/instructor";
 
 import logo from "../../../assets/icons/loogo.svg";
 import toggleIcon from "../../../assets/icons/sidebar-toggle.png";
@@ -24,6 +25,7 @@ import logoutIcon from "../../../assets/icons/logout.png";
 const TeacherSidebar = ({ isOpen, setIsOpen }) => {
   const unread = useSidebarUnread();
   const { user, logout, updateUser } = useContext(AuthContext);
+  const [activatingInstructor, setActivatingInstructor] = useState(false);
   const isInstructor = user?.accountType === "instructor" && user?.instructorStatus !== "suspended";
   const menu = [
     { title: "لوحة التحكم", icon: dashboardIcon, path: "/teacher-dashboard" },
@@ -46,36 +48,45 @@ const TeacherSidebar = ({ isOpen, setIsOpen }) => {
 
   const navigate = useNavigate();
 
+  const openInstructorCourses = (profile) => {
+    const instructorUser = {
+      ...user,
+      accountType: "instructor",
+      instructorId: profile?._id || profile?.id,
+      instructorStatus: profile?.status || "active",
+      instructorProfileSlug: profile?.profileSlug || "",
+    };
+    updateUser(instructorUser);
+    toast.success("تم تحويل حسابك إلى محاضر بنجاح");
+    navigate("/teacher/courses", { replace: true });
+  };
+
   const becomeInstructor = async () => {
+    if (activatingInstructor) return;
+    setActivatingInstructor(true);
     try {
       const response = await createInstructorProfile({
         agreementAccepted: true,
-        agreementVersion: "1.0",
+        agreementVersion: INSTRUCTOR_AGREEMENT_VERSION,
         headline: `محاضر في الأكاديمية - ${user?.fullName || user?.name || "معلم"}`,
         bio: "محاضر يقدم دورات تعليمية متخصصة عبر منصة الأكاديمية.",
       });
       const profile = response.data?.data || response.data;
-      updateUser({
-        ...user,
-        accountType: "instructor",
-        instructorId: profile?._id || profile?.id,
-        instructorStatus: profile?.status || "active",
-      });
-      toast.success("تم تفعيل حساب المحاضر ويمكنك الآن إضافة الدورات");
-      navigate("/teacher/courses");
+      openInstructorCourses(profile);
     } catch (error) {
       if (error?.response?.status === 409) {
         try {
           const response = await getMyInstructorProfile();
           const profile = response.data?.data || response.data;
-          updateUser({ ...user, accountType: "instructor", instructorId: profile?._id || profile?.id, instructorStatus: profile?.status || "active" });
-          navigate("/teacher/courses");
+          openInstructorCourses(profile);
           return;
         } catch {
           // Display the original backend error below.
         }
       }
       toast.error(error?.response?.data?.message || "تعذر تفعيل حساب المحاضر");
+    } finally {
+      setActivatingInstructor(false);
     }
   };
 
@@ -213,11 +224,12 @@ const TeacherSidebar = ({ isOpen, setIsOpen }) => {
           <button
             type="button"
             onClick={becomeInstructor}
+            disabled={activatingInstructor}
             className={`mb-2 flex w-full items-center rounded-lg bg-[#12AFA0] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[#0E9589] ${isOpen ? "gap-3 justify-start" : "justify-center"}`}
             title="كن محاضرًا"
           >
             <img src={dashboardIcon} alt="" className="h-5 w-5" />
-            {isOpen && <span>كن محاضرًا</span>}
+            {isOpen && <span>{activatingInstructor ? "جاري التفعيل..." : "كن محاضرًا"}</span>}
           </button>
         )}
         <button

@@ -154,6 +154,12 @@ const TeacherCoursesPage = () => {
     );
     setActionsMenu(null);
     if (!selectedCourse) return;
+    if (action === 'edit' && !['draft', 'rejected'].includes(selectedCourse.rawStatus)) {
+      toast.error(selectedCourse.rawStatus === 'pending_review'
+        ? 'لا يمكن تعديل الدورة أثناء مراجعتها. يمكن تعديلها بعد أن تعيدها الإدارة كمرفوضة.'
+        : 'التعديل متاح للمسودة أو الدورة المرفوضة فقط.');
+      return;
+    }
 
     if (action === "details") {
       navigate(`/teacher/courses/${selectedCourse.id}`);
@@ -170,6 +176,13 @@ const TeacherCoursesPage = () => {
       }
     }
     if (action === "delete") {
+      const archivableStatuses = ['draft', 'rejected', 'published'];
+      if (!archivableStatuses.includes(selectedCourse.rawStatus)) {
+        toast.error(selectedCourse.rawStatus === 'pending_review'
+          ? 'لا يمكن أرشفة الدورة وهي قيد المراجعة. انتظري قرار الإدارة أولاً.'
+          : 'لا يمكن أرشفة هذه الدورة في حالتها الحالية.');
+        return;
+      }
       const confirmed = await confirmToast({
         title: "حذف الدورة",
         message: `هل تريد حذف دورة «${selectedCourse.title}»؟ لن تظهر للطلاب بعد الحذف.`,
