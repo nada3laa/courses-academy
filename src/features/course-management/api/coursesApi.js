@@ -33,6 +33,11 @@ import {
   getAdminCourse,
   getAdminCourseEnrollments,
   getAdminCourseCategories,
+  createCourseQuiz,
+  updateCourseQuiz,
+  addCourseQuizQuestion,
+  updateCourseQuizQuestion,
+  reorderCourseQuizQuestions,
 } from "../../../services/APIService";
 
 const valueOf = (value, fallback = "") => {
@@ -543,12 +548,14 @@ export const saveCourseToApi = async ({ course, courseId, admin = false, submit 
   if (course.promoVideo?.file) await uploadCoursePromoVideo(id, course.promoVideo.file, progressHandler("جاري رفع الفيديو الترويجي"));
 
   let storedSections = [];
+  let storedQuizzes = [];
   if (courseId) {
     try {
       const detail = responseCourse(await (admin ? getAdminCourse(id) : getMyTeacherCourse(id)));
       storedSections = detail?.sections
         || detail?.curriculum_sections
         || (Array.isArray(detail?.curriculum) ? detail.curriculum : []);
+      storedQuizzes = Array.isArray(detail?.quizzes) ? detail.quizzes : [];
     } catch {
       storedSections = [];
     }
@@ -578,6 +585,47 @@ export const saveCourseToApi = async ({ course, courseId, admin = false, submit 
       const storedLessons = savedSection.lessons || [];
       for (let lessonIndex = 0; lessonIndex < section.lessons.length; lessonIndex += 1) {
         const lesson = section.lessons[lessonIndex];
+        if (lesson.type === 'اختبار') {
+          let savedQuiz = storedQuizzes.find((quiz) =>
+            String(quiz._id || quiz.id) === String(lesson.quizId || lesson._id || lesson.id));
+          const quizPayload = {
+            title: lesson.title || 'اختبار الدورة',
+            description: lesson.description || '',
+            passingPercentage: Number(lesson.passingPercentage || 60),
+            maxAttempts: lesson.maxAttempts ? Number(lesson.maxAttempts) : null,
+            isRequired: lesson.isRequired !== false,
+            lesson: null,
+          };
+          if (savedQuiz) {
+            await updateCourseQuiz(id, savedQuiz._id || savedQuiz.id, quizPayload);
+          } else {
+            const quizResponse = await createCourseQuiz(id, quizPayload);
+            savedQuiz = responseCourse(quizResponse);
+          }
+          const quizId = savedQuiz?._id || savedQuiz?.id;
+          if (!quizId) continue;
+          const storedQuestions = savedQuiz.questions || [];
+          const orderedQuestionIds = [];
+          for (const question of lesson.quiz || []) {
+            const options = (question.options || []).map((option, optionIndex) => ({
+              text: typeof option === 'string' ? option : option.text,
+              isCorrect: Number(question.correctIndex) === optionIndex || option.isCorrect === true,
+            }));
+            const questionPayload = { text: question.text, options, explanation: question.explanation || '' };
+            let savedQuestion = storedQuestions.find((item) =>
+              String(item._id || item.id) === String(question._id || question.id));
+            if (savedQuestion) {
+              await updateCourseQuizQuestion(id, quizId, savedQuestion._id || savedQuestion.id, questionPayload);
+            } else {
+              const questionResponse = await addCourseQuizQuestion(id, quizId, questionPayload);
+              savedQuestion = responseCourse(questionResponse);
+            }
+            const questionId = savedQuestion?._id || savedQuestion?.id;
+            if (questionId) orderedQuestionIds.push(String(questionId));
+          }
+          if (orderedQuestionIds.length > 1) await reorderCourseQuizQuestions(id, quizId, orderedQuestionIds);
+          continue;
+        }
         let savedLesson = storedLessons.find(
           (item) => String(item._id || item.id) === String(lesson._id || lesson.id),
         );

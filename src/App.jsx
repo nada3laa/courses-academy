@@ -113,6 +113,7 @@ import AdminCoursesPage from "./features/course-management/pages/AdminCoursesPag
 import AdminCourseDetailsPage from "./features/course-management/pages/AdminCourseDetailsPage";
 import AdminQuizReviewPage from "./features/course-management/pages/AdminQuizReviewPage";
 import AdminCourseFormPage from "./features/course-management/pages/AdminCourseFormPage";
+import CourseCategoriesPage from './pages/admin/CourseCategoriesPage';
 import CourseFinancesPage from "./pages/admin/course-finances/CourseFinancesPage";
 import CommissionSettingsPage from "./pages/admin/course-finances/CommissionSettingsPage";
 import InstructorCommissionRatesPage from "./pages/teacher/InstructorCommissionRatesPage";
@@ -611,6 +612,7 @@ function App() {
         <Route path="/admin/courses/:courseId/quizzes/:lessonId" element={user ? <AdminQuizReviewPage /> : <Navigate to="/login" replace />} />
         <Route path="/admin/courses/new" element={user ? <AdminCourseFormPage /> : <Navigate to="/login" replace />} />
         <Route path="/admin/courses/:courseId/edit" element={user ? <AdminCourseFormPage /> : <Navigate to="/login" replace />} />
+        <Route path={'/admin/course-categories'} element={user ? <CourseCategoriesPage /> : <Navigate to={'/login'} replace />} />
 
 
         <Route

@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   GraduationCap,
   BookOpen,
+  Tags,
   Video,
   MessageSquare,
   CreditCard,
@@ -58,6 +59,11 @@ const AdminSidebar = ({ isOpen, setIsOpen }) => {
       title: "الدورات",
       icon: BookOpen,
       path: "/admin/courses",
+    },
+    {
+      title: 'تصنيفات الدورات',
+      icon: Tags,
+      path: '/admin/course-categories',
     },
     {
       title: "جدول الحصص",

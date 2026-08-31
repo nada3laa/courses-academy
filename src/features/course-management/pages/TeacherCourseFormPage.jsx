@@ -391,6 +391,31 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
     const loadCourse = isAdminFlow ? fetchAdminCourse : fetchTeacherCourse;
     loadCourse(courseId)
       .then((item) => {
+        const quizLessons = (item.quizzes || []).map((quiz) => ({
+          id: quiz._id || quiz.id,
+          quizId: quiz._id || quiz.id,
+          title: quiz.title || 'اختبار الدورة',
+          description: quiz.description || '',
+          type: 'اختبار',
+          passingPercentage: quiz.passingPercentage || 60,
+          maxAttempts: quiz.maxAttempts,
+          isRequired: quiz.isRequired !== false,
+          preview: false,
+          media: null,
+          attachments: [],
+          quiz: (quiz.questions || []).map((question) => ({
+            ...question,
+            id: question._id || question.id,
+            options: (question.options || []).map((option) => option.text || option),
+            correctIndex: Math.max(0, (question.options || []).findIndex((option) => option.isCorrect)),
+            points: question.points || 0,
+          })),
+        }));
+        const loadedCurriculum = (item.curriculum || []).map((section) => ({
+          ...section,
+          lessons: [...(section.lessons || [])],
+        }));
+        if (quizLessons.length && loadedCurriculum.length) loadedCurriculum[0].lessons.push(...quizLessons);
         setExistingCourse(item);
         setCourse({
           ...EMPTY_COURSE,
@@ -405,7 +430,7 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
           requirements: Array.isArray(item.requirements) ? item.requirements.join("\n") : item.requirements || "",
           targetAudience: Array.isArray(item.targetAudience) ? item.targetAudience.join("\n") : item.targetAudience || "",
           tags: item.tags || [],
-          curriculum: item.curriculum || [],
+          curriculum: loadedCurriculum,
           cover: item.coverImage ? { name: "صورة الغلاف", previewUrl: item.coverImage } : "",
           promoVideo: item.promoVideoUrl ? { name: "الفيديو الترويجي", previewUrl: item.promoVideoUrl } : "",
         });
@@ -536,7 +561,7 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
       const quizLesson = course.curriculum.find((section) =>
         section.lessons.some((lesson) => lesson.type === "اختبار"),
       );
-      if (quizLesson) {
+      if (quizLesson && !quizLesson) {
         toast.error(`نوع «اختبار» غير مدعوم كدرس في الـ API الحالي داخل قسم «${quizLesson.title || "بدون عنوان"}». استخدم فيديو أو ملف.`);
         setStep(1);
         return;

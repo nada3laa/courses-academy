@@ -823,8 +823,16 @@ const AdminCourseDetailsPage = () => {
     isPendingReview && course.submittedCurriculum?.length
       ? course.submittedCurriculum
       : course.curriculum || [];
-  const reviewCourse = { ...course, curriculum: reviewCurriculum };
-  const totalLessons = reviewCurriculum.reduce(
+  const curriculumWithQuizzes = reviewCurriculum.map((section) => ({ ...section, lessons: [...(section.lessons || [])] }));
+  if (course.quizzes?.length && curriculumWithQuizzes.length) {
+    curriculumWithQuizzes[0].lessons.push(...course.quizzes.map((quiz) => ({
+      ...quiz,
+      id: quiz._id || quiz.id,
+      type: 'اختبار',
+    })));
+  }
+  const reviewCourse = { ...course, curriculum: curriculumWithQuizzes };
+  const totalLessons = curriculumWithQuizzes.reduce(
     (sum, section) => sum + (section.lessons?.length || 0),
     0,
   ) || course.lessons || 0;

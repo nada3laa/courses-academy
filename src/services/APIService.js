@@ -272,7 +272,7 @@ export const updateCourseQuizQuestion = (courseId, quizId, questionId, payload) 
 export const deleteCourseQuizQuestion = (courseId, quizId, questionId) => API.delete(`/courses/${courseId}/quizzes/${quizId}/questions/${questionId}`);
 export const reorderCourseQuizQuestions = (courseId, quizId, questionIds) => API.patch(`/courses/${courseId}/quizzes/${quizId}/questions/reorder`, { questionIds });
 export const submitCourseQuizAttempt = (courseId, quizId, payload) => API.post(`/courses/${courseId}/quizzes/${quizId}/attempts`, payload);
-export const getMyCourseQuizAttempts = (courseId, quizId) => API.get(`/courses/${courseId}/quizzes/${quizId}/attempts/me`);
+export const getMyCourseQuizAttempts = (courseId, quizId) => API.get(`/courses/${courseId}/quizzes/${quizId}/attempts`);
 export const verifyCourseCertificate = (verificationCode) => API.get(`/certificates/verify/${encodeURIComponent(verificationCode)}`);
 export const getCourseCertificate = (id) => API.get(`/certificates/${id}`);
 export const getAdminCourseCertificates = (params) => API.get('/admin/certificates', { params });

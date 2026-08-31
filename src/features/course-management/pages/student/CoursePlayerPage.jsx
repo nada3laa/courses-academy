@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import StudentLayout from '../../../../components/student/layout/StudentLayout';
 import { fetchPublicCourse } from '../../api/coursesApi';
 import { claimCourseCertificate, completeCourseLesson, getCourseLearningView, requestLessonMediaAccess } from '../../../../services/APIService';
+import { CircleHelp } from 'lucide-react';
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? response;
 const titleOf = (value) => value?.ar || value?.en || value || 'الدورة';
@@ -73,6 +74,7 @@ export default function CoursePlayerPage() {
         <aside className='rounded-xl border bg-white p-4 shadow-sm'><div className='mb-4 flex items-center justify-between'><h2 className='font-extrabold'>محتوى الدورة</h2><b className='text-[#123C91]'>{Math.round(progress)}%</b></div>
           <div className='mb-5 h-2 overflow-hidden rounded bg-gray-100'><div className='h-full bg-[#12C6B0]' style={{ width: `${progress}%` }} /></div>
           {view.curriculum?.map((section, index) => <div key={section.id} className='mb-3 overflow-hidden rounded-lg border'><button onClick={() => setOpenSection(openSection === index ? -1 : index)} className='flex w-full justify-between bg-gray-50 p-3 text-right font-bold'>{section.title}<ChevronDown size={17} /></button>{openSection === index && section.lessons?.map((lesson) => <button key={lesson.id} onClick={() => setCurrentLesson(lesson)} className={'flex w-full items-center gap-2 border-t p-3 text-right text-sm ' + (currentLesson?.id === lesson.id ? 'bg-blue-50 text-[#123C91]' : '')}>{lesson.progress?.status === 'completed' ? <CheckCircle2 size={17} className='text-[#12C6B0]' /> : lesson.contentType === 'document' ? <FileText size={17} /> : <PlayCircle size={17} />}{lesson.title}</button>)}</div>)}
+          {!!view.quizzes?.length && <div className={'mt-5 border-t pt-4'}><h3 className={'mb-3 font-extrabold'}>الاختبارات</h3>{view.quizzes.map((quiz) => <Link key={quiz.id || quiz._id} to={'/exam/' + slug + '?quiz=' + encodeURIComponent(quiz.id || quiz._id)} className={'mb-2 flex items-center gap-2 rounded-lg border border-[#D7E2F3] bg-[#F4F7FF] p-3 text-sm font-bold text-[#123C91]'}><CircleHelp size={17} />{quiz.title}</Link>)}</div>}
         </aside>
         <main>
           <div className='flex aspect-video items-center justify-center overflow-hidden rounded-xl bg-black text-white'>{!mediaUrl ? <LoaderCircle className='animate-spin' /> : currentLesson?.contentType === 'video' ? <video key={mediaUrl} src={mediaUrl} controls className='h-full w-full' /> : currentLesson?.contentType === 'audio' ? <audio src={mediaUrl} controls /> : <a href={mediaUrl} target='_blank' rel='noreferrer' className='rounded-lg bg-white px-6 py-3 font-bold text-[#123C91]'>فتح ملف الدرس</a>}</div>
