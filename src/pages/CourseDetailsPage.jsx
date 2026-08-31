@@ -6,6 +6,9 @@ import pythonCover from "../assets/courses/python-course.png";
 import { AuthContext } from "../context/AuthContext";
 import { enrollFreeCourse, fetchCourseAccess, fetchPublicCourse } from "../features/course-management/api/coursesApi";
 
+import { PlayCircle, Users, X } from 'lucide-react';
+import { requestLessonMediaAccess } from '../services/APIService';
+
 export default function CourseDetailsPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -16,6 +19,9 @@ export default function CourseDetailsPage() {
   const [openSection, setOpenSection] = useState(0);
   const [enrolled, setEnrolled] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [previewLesson, setPreviewLesson] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -41,6 +47,27 @@ export default function CourseDetailsPage() {
 
   const sections = course.curriculum || [];
   const lessonsCount = course.lessons || sections.reduce((total, section) => total + section.lessons.length, 0);
+  const openLessonPreview = async (lesson) => {
+    if (!lesson.preview) return;
+    setPreviewLesson(lesson);
+    setPreviewUrl('');
+    setPreviewLoading(true);
+    try {
+      const response = await requestLessonMediaAccess(course.id, lesson.id);
+      const data = response?.data?.data ?? response?.data ?? response;
+      if (!data?.url) throw new Error('PREVIEW_URL_MISSING');
+      setPreviewUrl(data.url.startsWith('http') ? data.url : 'https://api.alacademeya.com' + data.url);
+    } catch (requestError) {
+      setPreviewLesson(null);
+      toast.error(requestError?.response?.data?.message || 'تعذر تشغيل معاينة الدرس');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+  const closePreview = () => {
+    setPreviewLesson(null);
+    setPreviewUrl('');
+  };
   const subscribe = async () => {
     if (!user) {
       toast.error("سجّل الدخول أولًا للاشتراك في الدورة");
@@ -52,6 +79,7 @@ export default function CourseDetailsPage() {
         setSubmitting(true);
         await enrollFreeCourse(course.id);
         setEnrolled(true);
+        setCourse((current) => ({ ...current, students: Number(current.students || 0) + 1 }));
         toast.success("تم الاشتراك في الدورة بنجاح");
         navigate("/student-dashboard/courses");
       } catch (requestError) {
@@ -81,7 +109,7 @@ export default function CourseDetailsPage() {
                 </button>
                 {openSection === index && section.lessons.map((lesson, lessonIndex) => <div key={lesson.id || lessonIndex} className="flex justify-between border-t px-5 py-3 text-sm">
                   <span className="flex gap-2">{lesson.type === "video" ? <Video size={16} /> : <FileText size={16} />}{lesson.title}</span>
-                  {lesson.preview ? <span className="text-[#0A9B72]">معاينة</span> : <LockKeyhole size={15} />}
+                  {lesson.preview ? <button type={'button'} onClick={() => openLessonPreview(lesson)} className={'inline-flex items-center gap-1.5 rounded-lg bg-[#E8FFF9] px-3 py-1.5 font-bold text-[#087F72] hover:bg-[#D5FAF0]'}><PlayCircle size={16} />معاينة</button> : <LockKeyhole size={15} />}
                 </div>)}
               </div>)}
             </div> : <p className="text-[#667085]">لا يوجد محتوى متاح حاليًا.</p>}
@@ -93,11 +121,23 @@ export default function CourseDetailsPage() {
           <h1 className="text-2xl font-extrabold leading-10">{course.title}</h1>
           {course.instructorSlug ? <Link to={`/instructors/${course.instructorSlug}`} className="mt-2 block font-semibold text-[#123C91]">{course.instructor}</Link> : <p className="mt-2 font-semibold text-[#123C91]">{course.instructor}</p>}
           <div className="my-6 border-y py-5 text-center"><small className="block text-[#8B95A1]">السعر</small><strong className="text-2xl text-[#123C91]">{course.price ? `${course.price} ج.م` : "مجاني"}</strong></div>
-          <ul className="mb-6 space-y-3 text-sm text-[#5F6A78]"><li className="flex gap-2"><BookOpen size={17} />{lessonsCount} درس</li><li className="flex gap-2"><Globe2 size={17} />{course.language}</li><li className="flex gap-2"><Check size={17} />{course.level}</li></ul>
+          <ul className="mb-6 space-y-3 text-sm text-[#5F6A78]"><li className={'flex gap-2'}><Users size={17} />{Number(course.students || 0).toLocaleString('ar-EG')} طالب مشترك</li><li className="flex gap-2"><BookOpen size={17} />{lessonsCount} درس</li><li className="flex gap-2"><Globe2 size={17} />{course.language}</li><li className="flex gap-2"><Check size={17} />{course.level}</li></ul>
           <button type="button" onClick={subscribe} disabled={submitting} className="h-12 w-full rounded-md bg-[#123C91] font-bold text-white disabled:opacity-60">{submitting ? "جاري الاشتراك..." : enrolled ? "اذهب إلى دوراتي" : "اشترك في الدورة الآن"}</button>
         </aside>
       </div>
     </div>
+    {previewLesson && <div className={'fixed inset-0 z-[100] grid place-items-center bg-black/70 p-4'} onClick={(event) => event.target === event.currentTarget && closePreview()}>
+      <div className={'w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl'}>
+        <div className={'flex items-center justify-between border-b px-5 py-4'}>
+          <div><p className={'text-xs font-bold text-[#0A9B72]'}>معاينة مجانية</p><h2 className={'mt-1 font-extrabold'}>{previewLesson.title}</h2></div>
+          <button type={'button'} onClick={closePreview} aria-label={'إغلاق المعاينة'} className={'grid h-9 w-9 place-items-center rounded-lg bg-gray-100'}><X size={18} /></button>
+        </div>
+        <div className={'flex aspect-video items-center justify-center bg-black text-white'}>
+          {previewLoading || !previewUrl ? <LoaderCircle className={'animate-spin'} size={32} /> : previewLesson.type === 'فيديو' || previewLesson.contentType === 'video' ? <video src={previewUrl} controls autoPlay className={'h-full w-full'} /> : previewLesson.type === 'صوت' || previewLesson.contentType === 'audio' ? <audio src={previewUrl} controls autoPlay className={'w-4/5'} /> : <a href={previewUrl} target={'_blank'} rel={'noreferrer'} className={'rounded-lg bg-white px-6 py-3 font-bold text-[#123C91]'}>فتح محتوى الدرس</a>}
+        </div>
+        {previewLesson.description && <p className={'px-5 py-4 text-sm leading-7 text-[#667085]'}>{previewLesson.description}</p>}
+      </div>
+    </div>}
   </div>;
 }
 

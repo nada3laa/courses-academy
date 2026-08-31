@@ -254,11 +254,14 @@ export const deleteCourseLessonAttachment = (courseId, lessonId, attachmentId) =
 export const requestLessonAttachmentAccess = (courseId, lessonId, attachmentId) =>
   API.post(`/courses/${courseId}/lessons/${lessonId}/attachments/${attachmentId}/access`);
 export const cancelCoursePurchase = (courseId) => API.post(`/courses/${courseId}/purchase/cancel`);
-export const getAdminCoursePurchases = (params) => API.get('/course-purchases/admin', { params });
-export const getAdminCoursePurchase = (id) => API.get(`/course-purchases/admin/${id}`);
-export const getAdminCourseEnrollments = (params) => API.get('/course-enrollments/admin', { params });
-export const grantAdminCourseEnrollment = (payload) => API.post('/course-enrollments/admin/grant', payload);
-export const revokeAdminCourseEnrollment = (id) => API.delete(`/course-enrollments/admin/${id}`);
+export const getAdminCoursePurchases = (params) => API.get('/admin/course-purchases', { params });
+export const getAdminCoursePurchase = (id) => API.get(`/admin/course-purchases/${id}`);
+export const getAdminCourseEnrollments = (courseId) =>
+  API.get(`/courses/admin/${courseId}/enrollments`);
+export const grantAdminCourseEnrollment = (courseId, userId) =>
+  API.post(`/courses/admin/${courseId}/enrollments`, { userId });
+export const revokeAdminCourseEnrollment = (courseId, enrollmentId, reason) =>
+  API.post(`/courses/admin/${courseId}/enrollments/${enrollmentId}/revoke`, { reason });
 export const createCourseQuiz = (courseId, payload) => API.post(`/courses/${courseId}/quizzes`, payload);
 export const getCourseQuiz = (courseId, quizId) => API.get(`/courses/${courseId}/quizzes/${quizId}`);
 export const updateCourseQuiz = (courseId, quizId, payload) => API.patch(`/courses/${courseId}/quizzes/${quizId}`, payload);

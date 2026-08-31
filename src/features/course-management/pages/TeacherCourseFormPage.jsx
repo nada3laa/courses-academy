@@ -20,7 +20,7 @@ import TeacherLayout from "../../../components/teacher/layout/TeacherLayout";
 // ⚠️ تأكدي من المسار ده صح عندك (نفس نمط TeacherLayout بس جوه components/admin/layout)
 import AdminLayout from "../../../components/admin/layout/AdminLayout";
 import CourseStepsNavigation from "../components/CourseStepsNavigation";
-import { addCourseCategory, fetchCourseCategories, fetchCourseInstructors, fetchTeacherCourse, saveCourseToApi } from "../api/coursesApi";
+import { addCourseCategory, fetchAdminCourse, fetchCourseCategories, fetchCourseInstructors, fetchTeacherCourse, saveCourseToApi } from "../api/coursesApi";
 import { getCurriculums, getCurriculumStages, getStageGrades, getSubjects } from "../../../services/APIService";
 
 const EMPTY_COURSE = {
@@ -388,7 +388,8 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
 
   useEffect(() => {
     if (!courseId) return;
-    fetchTeacherCourse(courseId)
+    const loadCourse = isAdminFlow ? fetchAdminCourse : fetchTeacherCourse;
+    loadCourse(courseId)
       .then((item) => {
         setExistingCourse(item);
         setCourse({
@@ -410,7 +411,7 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
         });
       })
       .catch((error) => toast.error(error?.response?.data?.message || "تعذر تحميل بيانات الدورة"));
-  }, [courseId]);
+  }, [courseId, isAdminFlow]);
 
   const update = (field, value) =>
     setCourse((current) => ({ ...current, [field]: value }));
@@ -564,6 +565,7 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
       const saved = await saveCourseToApi({
         course,
         courseId: existingCourse?.id || courseId,
+        admin: isAdminFlow,
         submit: status === "قيد المراجعة",
         onProgress: setUploadStatus,
       });
@@ -574,7 +576,11 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
         setExistingCourse((current) => ({ ...(current || course), id: error.savedCourseId }));
       }
       const body = error?.response?.data;
-      toast.error(body?.message || body?.error || body?.code || error?.message || "تعذر حفظ الدورة", { id: savingToast });
+      const apiMessage = body?.message || body?.error || body?.code || error?.message;
+      const adminInstructorError = isAdminFlow && /instructor profile not found/i.test(String(apiMessage || ''));
+      toast.error(adminInstructorError
+        ? 'الـ API الحالي لا يسمح للأدمن بتعديل دورة يملكها محاضر. يلزم إضافة مسار تعديل خاص بالأدمن في الخادم.'
+        : apiMessage || 'تعذر حفظ الدورة', { id: savingToast });
     } finally {
       setSaving(false);
     }

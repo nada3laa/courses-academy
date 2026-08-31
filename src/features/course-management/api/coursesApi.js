@@ -31,6 +31,8 @@ import {
   getCourseAccess,
   getCourseLearningView,
   getAdminCourse,
+  getAdminCourseEnrollments,
+  getAdminCourseCategories,
 } from "../../../services/APIService";
 
 const valueOf = (value, fallback = "") => {
@@ -180,7 +182,9 @@ export const normalizeCourse = (source = {}) => {
     duration: Number(course.durationHours ?? course.totalDurationHours ?? course.duration ?? 0),
     lessons: Number(lessonCount),
     rating: Number(course.averageRating ?? course.rating ?? 0),
-    students: Number(course.enrollmentsCount ?? course.studentsCount ?? course.students ?? 0),
+    students: Number(Array.isArray(course.enrollments)
+      ? course.enrollments.filter((item) => !item?.status || item.status === 'active').length
+      : course.enrollmentsCount ?? course.studentsCount ?? (Array.isArray(course.students) ? course.students.length : course.students) ?? studentsData.length),
     revenue: Number(course.revenue ?? 0),
     createdAt: course.createdAt || source.createdAt,
     updatedAt: course.updatedAt || source.updatedAt,
@@ -386,9 +390,21 @@ export const fetchAdminCourses = async (params) => {
     getPendingAdminCourses(params),
     getMyTeacherCourses(params),
   ]);
-  return uniqueCourses(
+  const courses = uniqueCourses(
     responses.flatMap((result) => result.status === "fulfilled" ? listOf(result.value) : []).map(normalizeCourse),
   );
+  return Promise.all(courses.map(async (course) => {
+    if (!course.id) return course;
+    try {
+      const enrollmentResponse = await getAdminCourseEnrollments(course.id);
+      const enrollments = listOf(enrollmentResponse);
+      const activeEnrollments = enrollments.filter((enrollment) =>
+        !enrollment.status || enrollment.status === 'active');
+      return { ...course, students: activeEnrollments.length, studentsData: activeEnrollments };
+    } catch {
+      return course;
+    }
+  }));
 };
 
 // The API lifecycle archives courses and does not expose DELETE /courses/:id.
@@ -458,7 +474,22 @@ const responseCourse = (response) => {
 
 export const fetchAdminCourse = async (id) => {
   try {
-    return enrichCourseInstructor(normalizeCourse(responseCourse(await getAdminCourse(id))));
+    const [courseResponse, enrollmentsResponse, categoriesResponse] = await Promise.all([
+      getAdminCourse(id),
+      getAdminCourseEnrollments(id).catch(() => null),
+      getAdminCourseCategories().catch(() => null),
+    ]);
+    const course = responseCourse(courseResponse);
+    const enrollments = enrollmentsResponse ? listOf(enrollmentsResponse) : (course.enrollments || []);
+    const categoryId = course.category?._id || course.category?.id || course.category;
+    const category = categoriesResponse
+      ? listOf(categoriesResponse).find((item) => String(item._id || item.id) === String(categoryId))
+      : null;
+    return enrichCourseInstructor(normalizeCourse({
+      ...course,
+      category: category || course.category,
+      enrollments,
+    }));
   } catch (adminError) {
     if (![401, 403, 404].includes(adminError?.response?.status)) throw adminError;
   }
@@ -478,7 +509,7 @@ export const fetchAdminCourse = async (id) => {
   throw new Error("لم يتم العثور على الدورة");
 };
 
-export const saveCourseToApi = async ({ course, courseId, submit = false, onProgress = () => {} }) => {
+export const saveCourseToApi = async ({ course, courseId, admin = false, submit = false, onProgress = () => {} }) => {
   onProgress({ label: "جاري حفظ بيانات الدورة", percent: 0 });
   const payload = coursePayload(course);
   if (payload.discountPercent !== undefined) {
@@ -514,8 +545,10 @@ export const saveCourseToApi = async ({ course, courseId, submit = false, onProg
   let storedSections = [];
   if (courseId) {
     try {
-      const detail = responseCourse(await getMyTeacherCourse(id));
-      storedSections = detail?.sections || detail?.curriculum || [];
+      const detail = responseCourse(await (admin ? getAdminCourse(id) : getMyTeacherCourse(id)));
+      storedSections = detail?.sections
+        || detail?.curriculum_sections
+        || (Array.isArray(detail?.curriculum) ? detail.curriculum : []);
     } catch {
       storedSections = [];
     }
@@ -548,11 +581,14 @@ export const saveCourseToApi = async ({ course, courseId, submit = false, onProg
         let savedLesson = storedLessons.find(
           (item) => String(item._id || item.id) === String(lesson._id || lesson.id),
         );
+        const lessonContentType = ({ 'فيديو': 'video', 'ملف': 'document', 'صوت': 'audio', 'مستند': 'document' })[lesson.type]
+          || String(lesson.type || 'video').toLowerCase();
         const existingLessonId = savedLesson?._id || savedLesson?.id;
         if (existingLessonId) {
           await updateCourseLesson(id, existingLessonId, {
             title: lesson.title,
             description: lesson.description || '',
+            contentType: lessonContentType,
             isPreview: Boolean(lesson.preview),
           });
         }
@@ -560,7 +596,7 @@ export const saveCourseToApi = async ({ course, courseId, submit = false, onProg
           const lessonResponse = await createCourseLesson(id, sectionId, {
             title: lesson.title,
             description: lesson.description || "",
-            contentType: ({ "فيديو": "video", "ملف": "document", "صوت": "audio", "مستند": "document" })[lesson.type] || String(lesson.type || "video").toLowerCase(),
+            contentType: lessonContentType,
             isPreview: Boolean(lesson.preview),
           });
           savedLesson = responseCourse(lessonResponse)?.lesson || responseCourse(lessonResponse);

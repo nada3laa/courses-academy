@@ -24,6 +24,7 @@ import {
   getTeacher,
   getTeacherMonthlyReport,
   updateTeacherProfile,
+  updateInstructorStatus,
   updateUser,
 } from "../../../services/APIService";
 import { hasIncompleteRegistration } from "../../../utils/incompleteRegistration";
@@ -112,6 +113,7 @@ const TeachersPage = () => {
   const [selectedTeacher, setSelectedTeacher] = useState(null);
   const [approvingTeacher, setApprovingTeacher] = useState(false);
   const [rejectingTeacher, setRejectingTeacher] = useState(false);
+  const [changingInstructorStatus, setChangingInstructorStatus] = useState(false);
   const month = useMemo(() => currentMonth(), []);
 
   const loadTeachers = useCallback(async () => {
@@ -289,6 +291,43 @@ const TeachersPage = () => {
       toast.error(error.response?.data?.message || "تعذر رفض طلب المعلم");
     } finally {
       setRejectingTeacher(false);
+    }
+  };
+
+  const handleInstructorStatus = async () => {
+    if (!selectedTeacher) return;
+    const isSuspended = selectedTeacher.raw?.status === 'suspended';
+    let reason = '';
+    if (!isSuspended) {
+      reason = window.prompt('اكتب سبب إيقاف المحاضر:')?.trim() || '';
+      if (!reason) {
+        toast.error('سبب الإيقاف مطلوب');
+        return;
+      }
+    }
+    setChangingInstructorStatus(true);
+    try {
+      const response = await updateInstructorStatus(selectedTeacher.id, {
+        status: isSuspended ? 'active' : 'suspended',
+        ...(reason ? { reason } : {}),
+      });
+      const profile = response?.data?.data ?? response?.data ?? {};
+      const nextStatus = profile.status || (isSuspended ? 'active' : 'suspended');
+      const updatedTeacher = {
+        ...selectedTeacher,
+        raw: { ...selectedTeacher.raw, ...profile, status: nextStatus },
+        status: nextStatus === 'suspended' ? 'موقوف' : 'نشط',
+        isApproved: nextStatus === 'active',
+        isRejected: false,
+      };
+      setSelectedTeacher(updatedTeacher);
+      setTeachers((current) => current.map((teacher) =>
+        teacher.id === updatedTeacher.id ? updatedTeacher : teacher));
+      toast.success(nextStatus === 'active' ? 'تم تفعيل المحاضر' : 'تم إيقاف المحاضر');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'تعذر تحديث حالة المحاضر');
+    } finally {
+      setChangingInstructorStatus(false);
     }
   };
 
@@ -660,6 +699,23 @@ const TeachersPage = () => {
                       رفض الطلب
                     </button>
                   </>
+                )}
+                {(selectedTeacher.isApproved || ['active', 'suspended'].includes(selectedTeacher.raw?.status)) && (
+                  <button
+                    type={'button'}
+                    disabled={changingInstructorStatus}
+                    onClick={handleInstructorStatus}
+                    className={`flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${selectedTeacher.raw?.status === 'suspended' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'}`}
+                  >
+                    {changingInstructorStatus ? (
+                      <Loader2 size={18} className={'animate-spin'} />
+                    ) : selectedTeacher.raw?.status === 'suspended' ? (
+                      <CheckCircle2 size={18} />
+                    ) : (
+                      <XCircle size={18} />
+                    )}
+                    {selectedTeacher.raw?.status === 'suspended' ? 'إعادة تفعيل المحاضر' : 'إيقاف المحاضر'}
+                  </button>
                 )}
                 <a
                   href={whatsappUrl(selectedTeacher.phone) || undefined}

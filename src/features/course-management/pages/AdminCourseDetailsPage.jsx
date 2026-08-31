@@ -199,8 +199,11 @@ const OverviewTab = ({ course, coverSrc, totalLessons }) => {
   );
 };
 
+import { requestLessonMediaAccess } from '../../../services/APIService';
+
 const CurriculumTab = ({ course }) => {
   const navigate = useNavigate();
+  const [previewingLessonId, setPreviewingLessonId] = useState(null);
   const sections = course.curriculum?.length
     ? course.curriculum
     : [{ id: "empty", title: "مقدمة", lessons: [] }];
@@ -224,6 +227,25 @@ const CurriculumTab = ({ course }) => {
       else next.add(sectionId);
       return next;
     });
+  };
+
+  const previewLesson = async (lesson) => {
+    if (!lesson?.id || previewingLessonId) return;
+    const previewWindow = window.open('', '_blank');
+    setPreviewingLessonId(lesson.id);
+    try {
+      const response = await requestLessonMediaAccess(course.id, lesson.id);
+      const data = response?.data?.data ?? response?.data ?? response;
+      if (!data?.url) throw new Error('PREVIEW_URL_MISSING');
+      const url = data.url.startsWith('http') ? data.url : 'https://api.alacademeya.com' + data.url;
+      if (previewWindow) previewWindow.location.href = url;
+      else window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      previewWindow?.close();
+      toast.error(error?.response?.data?.message || 'تعذر تشغيل معاينة الدرس');
+    } finally {
+      setPreviewingLessonId(null);
+    }
   };
 
   return (
@@ -278,8 +300,8 @@ const CurriculumTab = ({ course }) => {
                             <CircleHelp size={14} /> اختبار
                           </button>
                         ) : (
-                          <button type="button" className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-[#12C6B0] bg-[#E8FFFC] px-4 py-2 font-semibold text-[#087F72] sm:w-auto">
-                            <Video size={13} /> معاينة
+                          <button type="button" disabled={previewingLessonId === lesson.id} onClick={() => previewLesson(lesson)} className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-[#12C6B0] bg-[#E8FFFC] px-4 py-2 font-semibold text-[#087F72] disabled:cursor-wait disabled:opacity-60 sm:w-auto">
+                            <Video size={13} className={previewingLessonId === lesson.id ? 'animate-pulse' : ''} /> {previewingLessonId === lesson.id ? 'جاري الفتح...' : 'معاينة'}
                           </button>
                         ))}
                       </div>
