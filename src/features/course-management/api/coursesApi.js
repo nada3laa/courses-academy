@@ -18,6 +18,7 @@ import {
   createCourseSection,
   createCourseLesson,
   updateCourseSection,
+  deleteCourseSection,
   updateCourseLesson,
   uploadCourseLessonMedia,
   submitMarketplaceCourse,
@@ -99,7 +100,9 @@ const normalizeInstructor = (profile = {}, account = null) => {
 
 export const normalizeCourse = (source = {}) => {
   const enrollment = source.enrollment || source;
-  const course = source.course || source.courseId || enrollment.course || source;
+  const linkedCourse = source.course || source.courseId || enrollment.course;
+  const course = linkedCourse && typeof linkedCourse === 'object' ? linkedCourse : source;
+  const linkedCourseId = typeof linkedCourse === 'string' ? linkedCourse : '';
   const sections = (Array.isArray(course.sections) && course.sections.length ? course.sections : null)
     || (Array.isArray(course.curriculum) ? course.curriculum : null)
     || (Array.isArray(course.curriculum_sections) ? course.curriculum_sections : null)
@@ -109,7 +112,7 @@ export const normalizeCourse = (source = {}) => {
     0,
   );
   const completedLessons = source.completedLessonsCount ?? source.progress?.completedLessons ?? 0;
-  const progress = Number(source.progressPercentage ?? source.progress?.percentage ?? source.progress ?? 0);
+  const progress = Number(source.progressPercentage ?? source.progress?.progressPercentage ?? source.progress?.percentage ?? (typeof source.progress === 'number' ? source.progress : 0));
   const instructor = course.instructor || course.teacher || course.createdBy || {};
   const normalizedInstructor = typeof instructor === "object" && instructor !== null
     ? normalizeInstructor(instructor)
@@ -143,8 +146,8 @@ export const normalizeCourse = (source = {}) => {
 
   return {
     ...course,
-    id: course._id || course.id,
-    slug: course.slug || course._id || course.id,
+    id: course._id || course.id || linkedCourseId,
+    slug: course.slug || course._id || course.id || linkedCourseId,
     title: String(valueOf(course.title, "دورة تعليمية")),
     titleEn: textOf(course.title?.en || course.titleEn || course.titleEnglish),
     description: String(valueOf(course.description)),
@@ -240,7 +243,7 @@ export const normalizeCourse = (source = {}) => {
       percentage: Number.isFinite(progress) ? progress : 0,
       completedLessons: Number(completedLessons),
       totalLessons: Number(lessonCount),
-      completedTests: Number(source.completedQuizzesCount ?? 0),
+      completedTests: Number(source.completedQuizzesCount ?? source.progress?.requiredQuizzesPassed ?? 0),
       lastCompletedTitle: valueOf(source.lastLesson?.title),
     },
     enrollmentId: source._id || source.id,
@@ -381,13 +384,27 @@ export const fetchCourseLearningView = async (courseId) => {
 };
 
 export const fetchTeacherCourses = async (params) =>
-  listOf(await getMyTeacherCourses(params)).map(normalizeCourse);
+  listOf(await getMyTeacherCourses(params))
+    .map(normalizeCourse)
+    .filter((course) => course.rawStatus !== 'archived');
 
 export const fetchTeacherCourse = async (id) =>
   enrichWithMyInstructorProfile(normalizeCourse(responseCourse(await getMyTeacherCourse(id))));
 
-export const fetchStudentCourses = async (params) =>
-  listOf(await getMyCourseEnrollments(params)).map(normalizeCourse);
+export const fetchStudentCourses = async (params) => {
+  const enrollments = listOf(await getMyCourseEnrollments(params));
+  return Promise.all(enrollments.map(async (enrollment) => {
+    if (enrollment?.course && typeof enrollment.course === 'object') return normalizeCourse(enrollment);
+    const courseId = enrollment?.course || enrollment?.courseId;
+    if (!courseId) return normalizeCourse(enrollment);
+    try {
+      const course = responseCourse(await getPublicCourse(courseId));
+      return normalizeCourse({ ...enrollment, course });
+    } catch {
+      return normalizeCourse(enrollment);
+    }
+  }));
+};
 
 export const fetchAdminCourses = async (params) => {
   const responses = await Promise.allSettled([
@@ -397,7 +414,7 @@ export const fetchAdminCourses = async (params) => {
   ]);
   const courses = uniqueCourses(
     responses.flatMap((result) => result.status === "fulfilled" ? listOf(result.value) : []).map(normalizeCourse),
-  );
+  ).filter((course) => course.rawStatus !== 'archived');
   return Promise.all(courses.map(async (course) => {
     if (!course.id) return course;
     try {
@@ -526,11 +543,17 @@ export const saveCourseToApi = async ({ course, courseId, admin = false, submit 
   if (courseId) {
     response = await updateMarketplaceCourse(courseId, payload);
   } else {
+    // Paid courses are validated during creation, so their price must be sent
+    // in the first request rather than waiting for the follow-up PATCH.
     response = await createMarketplaceCourse({
       title: payload.title,
       category: payload.category,
       courseType: payload.courseType,
       pricingType: payload.pricingType,
+      ...(payload.pricingType === 'paid' ? {
+        price: payload.price,
+        discountPercentage: payload.discountPercentage,
+      } : {}),
     });
     const created = responseCourse(response);
     id = created?._id || created?.id;
@@ -561,11 +584,17 @@ export const saveCourseToApi = async ({ course, courseId, admin = false, submit 
     }
   }
 
+  const retainedSectionIds = new Set();
   for (let sectionIndex = 0; sectionIndex < course.curriculum.length; sectionIndex += 1) {
       const section = course.curriculum[sectionIndex];
       let savedSection = storedSections.find(
         (item) => String(item._id || item.id) === String(section._id || section.id),
       );
+      if (!savedSection) {
+        savedSection = storedSections.find((item) =>
+          String(valueOf(item.title)).trim() === String(section.title || '').trim());
+      }
+      if (!savedSection) savedSection = storedSections[sectionIndex];
       const existingSectionId = savedSection?._id || savedSection?.id;
       if (existingSectionId) {
         await updateCourseSection(id, existingSectionId, {
@@ -582,12 +611,17 @@ export const saveCourseToApi = async ({ course, courseId, admin = false, submit 
       }
       const sectionId = savedSection?._id || savedSection?.id;
       if (!sectionId) continue;
+      retainedSectionIds.add(String(sectionId));
       const storedLessons = savedSection.lessons || [];
       for (let lessonIndex = 0; lessonIndex < section.lessons.length; lessonIndex += 1) {
         const lesson = section.lessons[lessonIndex];
         if (lesson.type === 'اختبار') {
           let savedQuiz = storedQuizzes.find((quiz) =>
             String(quiz._id || quiz.id) === String(lesson.quizId || lesson._id || lesson.id));
+          if (!savedQuiz) {
+            savedQuiz = storedQuizzes.find((quiz) =>
+              String(valueOf(quiz.title)).trim() === String(lesson.title || '').trim());
+          }
           const quizPayload = {
             title: lesson.title || 'اختبار الدورة',
             description: lesson.description || '',
@@ -607,11 +641,26 @@ export const saveCourseToApi = async ({ course, courseId, admin = false, submit 
           const storedQuestions = savedQuiz.questions || [];
           const orderedQuestionIds = [];
           for (const question of lesson.quiz || []) {
-            const options = (question.options || []).map((option, optionIndex) => ({
-              text: typeof option === 'string' ? option : option.text,
-              isCorrect: Number(question.correctIndex) === optionIndex || option.isCorrect === true,
-            }));
-            const questionPayload = { text: question.text, options, explanation: question.explanation || '' };
+            const questionText = String(question.text || '').trim();
+            const options = (question.options || [])
+              .map((option, optionIndex) => ({
+                text: String(typeof option === 'string' ? option : option.text || '').trim(),
+                isCorrect: Number(question.correctIndex) === optionIndex || option.isCorrect === true,
+              }))
+              .filter((option) => option.text);
+            const correctOptions = options.filter((option) => option.isCorrect);
+            if (!questionText || options.length < 2 || correctOptions.length !== 1) {
+              const quizValidationError = new Error(
+                !questionText
+                  ? 'اكتب نص السؤال داخل اختبار «' + lesson.title + '»'
+                  : options.length < 2
+                    ? 'أضف اختيارين مكتوبين على الأقل للسؤال «' + questionText + '»'
+                    : 'حدد إجابة صحيحة واحدة للسؤال «' + questionText + '»',
+              );
+              quizValidationError.savedCourseId = id;
+              throw quizValidationError;
+            }
+            const questionPayload = { text: questionText, options, explanation: question.explanation || '' };
             let savedQuestion = storedQuestions.find((item) =>
               String(item._id || item.id) === String(question._id || question.id));
             if (savedQuestion) {
@@ -629,6 +678,11 @@ export const saveCourseToApi = async ({ course, courseId, admin = false, submit 
         let savedLesson = storedLessons.find(
           (item) => String(item._id || item.id) === String(lesson._id || lesson.id),
         );
+        if (!savedLesson) {
+          savedLesson = storedLessons.find((item) =>
+            String(valueOf(item.title)).trim() === String(lesson.title || '').trim());
+        }
+        if (!savedLesson) savedLesson = storedLessons[lessonIndex];
         const lessonContentType = ({ 'فيديو': 'video', 'ملف': 'document', 'صوت': 'audio', 'مستند': 'document' })[lesson.type]
           || String(lesson.type || 'video').toLowerCase();
         const existingLessonId = savedLesson?._id || savedLesson?.id;
@@ -662,7 +716,30 @@ export const saveCourseToApi = async ({ course, courseId, admin = false, submit 
         }
       }
   }
+  // A failed earlier save can leave a duplicate section with an explicitly
+  // empty lessons array. Remove only those confirmed-empty, unmatched copies;
+  // never remove a section whose lesson state is absent or contains content.
+  for (const storedSection of storedSections) {
+    const storedSectionId = storedSection?._id || storedSection?.id;
+    const isConfirmedEmpty = Array.isArray(storedSection?.lessons) && storedSection.lessons.length === 0;
+    if (storedSectionId && isConfirmedEmpty && !retainedSectionIds.has(String(storedSectionId))) {
+      await deleteCourseSection(id, storedSectionId);
+    }
+  }
   if (submit) {
+    const verificationDetail = responseCourse(await (admin ? getAdminCourse(id) : getMyTeacherCourse(id)));
+    const verificationSections = verificationDetail?.sections
+      || verificationDetail?.curriculum_sections
+      || (Array.isArray(verificationDetail?.curriculum) ? verificationDetail.curriculum : []);
+    const lessonsWithoutMedia = verificationSections.flatMap((section) =>
+      (section.lessons || [])
+        .filter((lesson) => !lesson.primaryContent)
+        .map((lesson) => valueOf(lesson.title, 'درس بدون عنوان')));
+    if (lessonsWithoutMedia.length) {
+      const mediaError = new Error('ارفع أو أعد اختيار المحتوى الأساسي للدروس: ' + [...new Set(lessonsWithoutMedia)].join('، '));
+      mediaError.savedCourseId = id;
+      throw mediaError;
+    }
     onProgress({ label: "جاري إرسال الدورة للمراجعة", percent: 100 });
     try {
       const submitResponse = await submitMarketplaceCourse(id);

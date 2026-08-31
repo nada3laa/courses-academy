@@ -498,6 +498,11 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
 
   const save = async (status = course.status) => {
     if (saving) return;
+    if (course.pricingType === 'paid' && (!Number.isFinite(Number(course.price)) || Number(course.price) <= 0)) {
+      toast.error('أدخل سعرًا صحيحًا أكبر من صفر للدورة المدفوعة');
+      setStep(2);
+      return;
+    }
     if (status === 'قيد المراجعة') {
       const missing = [];
       if (!course.title.trim()) missing.push('عنوان الدورة بالعربية');
@@ -1095,6 +1100,13 @@ const TeacherCourseFormPage = ({ useTeacherLayout = true }) => {
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (!file) return;
+                      const isDocument = activeModalLesson(contentModal)?.type === 'ملف';
+                      const maximumSize = (isDocument ? 20 : 500) * 1024 * 1024;
+                      if (file.size > maximumSize) {
+                        toast.error(isDocument ? 'حجم ملف الدرس يجب ألا يتجاوز 20MB' : 'حجم فيديو الدرس يجب ألا يتجاوز 500MB');
+                        event.target.value = '';
+                        return;
+                      }
                       updateLesson(contentModal.sectionId, contentModal.lessonId, {
                         media: {
                           file,

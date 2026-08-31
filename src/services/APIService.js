@@ -188,8 +188,8 @@ export const createCourseLesson = (courseId, sectionId, payload) =>
 export const uploadCourseLessonMedia = (courseId, lessonId, file, contentType = "video", onUploadProgress) => {
   const formData = new FormData();
   formData.append("media", file);
-  formData.append("type", contentType);
-  return API.patch(`/courses/${courseId}/lessons/${lessonId}/media`, formData, { onUploadProgress, timeout: 10 * 60 * 1000 });
+  formData.append("contentType", contentType);
+  return API.patch(`/courses/${courseId}/lessons/${lessonId}/media`, formData, { onUploadProgress, timeout: 30 * 60 * 1000 });
 };
 export const submitMarketplaceCourse = (id) => API.post(`/courses/${id}/submit`);
 export const getMyTeacherCourses = (params) => API.get("/courses/me", { params });
@@ -252,7 +252,7 @@ export const uploadCourseLessonAttachments = (courseId, lessonId, files, onUploa
 export const deleteCourseLessonAttachment = (courseId, lessonId, attachmentId) =>
   API.delete(`/courses/${courseId}/lessons/${lessonId}/attachments/${attachmentId}`);
 export const requestLessonAttachmentAccess = (courseId, lessonId, attachmentId) =>
-  API.post(`/courses/${courseId}/lessons/${lessonId}/attachments/${attachmentId}/access`);
+  API.post(`/courses/${courseId}/lessons/${lessonId}/attachments/${attachmentId}/media-access`);
 export const cancelCoursePurchase = (courseId) => API.post(`/courses/${courseId}/purchase/cancel`);
 export const getAdminCoursePurchases = (params) => API.get('/admin/course-purchases', { params });
 export const getAdminCoursePurchase = (id) => API.get(`/admin/course-purchases/${id}`);
